@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rice Model Checks</title>
+<meta name="description" content="Independent scientific checks of the Rice on the Boil model: analytical solutions, conservation, limiting cases, scaling and plausibility against sources.">
+<style>
+:root{--bg:#f5efe3;--panel:#fffdf8;--ink:#2b2622;--muted:#776b5f;--line:#e5d9c5;--accent:#b8700f;--good:#3f7d34;--bad:#b3321f;--info:#2f7fb5}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141210;--panel:#1e1b18;--ink:#efe7da;--muted:#a99d8f;--line:#3a332c;--accent:#e6a23c;--good:#86c26f;--bad:#ef7a62;--info:#6db3e3}}
+:root[data-theme="dark"]{--bg:#141210;--panel:#1e1b18;--ink:#efe7da;--muted:#a99d8f;--line:#3a332c;--accent:#e6a23c;--good:#86c26f;--bad:#ef7a62;--info:#6db3e3}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1100px;margin:auto;padding:24px 16px 48px}
+h1{font:600 28px/1.2 "Iowan Old Style",Palatino,Georgia,serif;margin:0 0 6px}
+h2{font:600 18px "Iowan Old Style",Palatino,Georgia,serif;margin:26px 0 8px}
+p{color:var(--muted);margin:6px 0}
+a{color:var(--accent)}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+button{border:0;background:var(--accent);color:#fff;border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer;font:600 14px system-ui}
+.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line);font-weight:500}
+.sum{font-weight:600}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13.5px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}
+td.v{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.st{font-weight:700;font-size:12px;padding:2px 8px;border-radius:6px;color:#fff;display:inline-block}
+.PASS{background:var(--good)}.FAIL{background:var(--bad)}.INFO{background:var(--info)}
+.d{color:var(--muted);font-size:12px}
+.wrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<main>
+  <h1>Independent checks of the rice model</h1>
+  <p>This page runs <code>Code/checks.js</code> against the same engine the interactive model uses (<code>Model/physics.js</code>). Nothing is installed and nothing leaves this browser. Each check states what is compared, the tolerance and the result.</p>
+  <p>Groups — <b>A</b> numerical model vs exact analytical solutions · <b>B</b> conservation of water, energy, dry solid and volume · <b>C</b> limiting cases · <b>D</b> scaling and order-of-magnitude arguments · <b>E</b> plausibility against published values (not fitted).</p>
+  <div class="bar"><button id="run">Run all checks</button><span class="sum" id="sum">Running…</span><span class="d" id="time"></span></div>
+  <div class="wrap"><table><thead><tr><th>ID</th><th>Check</th><th style="text-align:right">Value</th><th>Tolerance</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <h2>Data behind the checks (CSV)</h2>
+  <p>Download the comparison tables (these are also written to <code>Results/</code> by <code>sh Code/make_results.sh</code>).</p>
+  <div class="bar" id="dl"></div>
+  <p><a href="../Model/index.html">← Back to the interactive model</a></p>
+</main>
+<script src="../Model/physics.js"></script>
+<script src="checks.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function run() {
+  $('sum').textContent = 'Running…'; $('rows').innerHTML = '';
+  setTimeout(() => {
+    const t0 = performance.now(), out = RiceChecks.runChecks();
+    const groups = { A: 'A · Numerical model vs analytical solutions', B: 'B · Conservation', C: 'C · Limiting cases', D: 'D · Scaling', E: 'E · Plausibility against sources (not fitted)' };
+    let html = '', last = '';
+    for (const r of out.results) {
+      if (r.group !== last) { html += `<tr><th colspan="5" style="background:transparent;color:var(--ink);font-weight:650;font-size:13.5px">${groups[r.group]}</th></tr>`; last = r.group; }
+      const v = typeof r.value === 'number' ? (Math.abs(r.value) !== 0 && (Math.abs(r.value) < 1e-3 || Math.abs(r.value) >= 1e5) ? r.value.toExponential(2) : (+r.value.toPrecision(4)).toString()) : esc(r.value);
+      html += `<tr><td>${r.id}</td><td>${esc(r.name)}${r.detail ? `<div class="d">${esc(r.detail)}</div>` : ''}</td><td class="v">${v}</td><td>${esc(r.tol)}</td><td><span class="st ${r.status}">${r.status}</span></td></tr>`;
+    }
+    $('rows').innerHTML = html;
+    const nf = out.results.filter(r => r.status === 'FAIL').length, np = out.results.filter(r => r.status === 'PASS').length;
+    $('sum').textContent = `${np} passed · ${nf} failed · ${out.results.length - np - nf} informational`;
+    $('sum').style.color = nf ? 'var(--bad)' : 'var(--good)';
+    $('time').textContent = `(${((performance.now() - t0) / 1000).toFixed(1)} s)`;
+    $('dl').innerHTML = Object.keys(out.tables).map(k => `<button class="ghost" data-k="${k}">${k}.csv</button>`).join('');
+    $('dl').querySelectorAll('button').forEach(b => b.onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out.tables[b.dataset.k]], { type: 'text/csv' })); a.download = b.dataset.k + '.csv'; a.click(); });
+  }, 30);
+}
+$('run').onclick = run; run();
+</script>
+</body>
+</html>

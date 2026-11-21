@@ -1,0 +1,1572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rice on the Boil</title>
+<meta name="description" content="An interactive investigation of heat and water transport in cooking rice: soaking, heating, gelatinization, swelling and the whole pot. MS2280 Project 19.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23b8700f'/%3E%3Cellipse cx='32' cy='33' rx='20' ry='11' transform='rotate(-30 32 33)' fill='%23fbf3e2'/%3E%3Cellipse cx='32' cy='33' rx='9' ry='5' transform='rotate(-30 32 33)' fill='%23ffffff'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f5efe3;--panel:#fffdf8;--panel2:#faf4e8;--ink:#2b2622;--muted:#776b5f;--line:#e5d9c5;--line2:#efe6d6;
+  --accent:#b8700f;--accent-ink:#7e4a06;--accent-soft:#f6e6c8;--water:#2f7fb5;--water-soft:#dcebf5;--heat:#c2412d;--leaf:#4f8a3c;--plum:#8a4f8a;
+  --calc:#2f7fb5;--illus:#a7741b;--obs:#3f7d34;--good:#3f7d34;--bad:#b3321f;
+  --shadow:0 1px 2px rgba(70,45,10,.06),0 8px 24px rgba(70,45,10,.07);
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --steel:#8d8a86;--steel2:#b9b4ac;--flame1:#f2a33a;--flame2:#e2552b;--pot:#6f6a64;
+}
+:root[data-theme="dark"]{
+  --bg:#141210;--panel:#1e1b18;--panel2:#25211d;--ink:#efe7da;--muted:#a99d8f;--line:#3a332c;--line2:#2f2a25;
+  --accent:#e6a23c;--accent-ink:#f3c27a;--accent-soft:#3a2c17;--water:#6db3e3;--water-soft:#1b2c3a;--heat:#ef7a62;--leaf:#86c26f;--plum:#c58ac5;
+  --calc:#6db3e3;--illus:#e0b25a;--obs:#86c26f;--good:#86c26f;--bad:#ef7a62;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  --steel:#77736e;--steel2:#57534e;--pot:#9a948c;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141210;--panel:#1e1b18;--panel2:#25211d;--ink:#efe7da;--muted:#a99d8f;--line:#3a332c;--line2:#2f2a25;
+  --accent:#e6a23c;--accent-ink:#f3c27a;--accent-soft:#3a2c17;--water:#6db3e3;--water-soft:#1b2c3a;--heat:#ef7a62;--leaf:#86c26f;--plum:#c58ac5;
+  --calc:#6db3e3;--illus:#e0b25a;--obs:#86c26f;--good:#86c26f;--bad:#ef7a62;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  --steel:#77736e;--steel2:#57534e;--pot:#9a948c;}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent-ink)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top-in{max-width:1480px;margin:auto;display:flex;align-items:center;gap:16px;padding:10px 22px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand h1{font:600 21px/1.1 var(--serif);margin:0;letter-spacing:.2px}
+.brand small{display:block;font:12px var(--sans);color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .sp{flex:1}
+.iconbtn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:7px 12px;cursor:pointer;font-size:13px;color:var(--ink);text-decoration:none;white-space:nowrap}
+.iconbtn:hover{border-color:var(--accent)}
+.iconbtn svg{width:16px;height:16px}
+/* ---------- journey ---------- */
+.journey{max-width:1480px;margin:auto;padding:14px 22px 4px;overflow-x:auto}
+.journey ol{list-style:none;display:flex;gap:0;margin:0;padding:0;min-width:760px}
+.journey li{flex:1;position:relative}
+.journey li:not(:last-child)::after{content:"";position:absolute;top:22px;left:calc(50% + 26px);right:calc(-50% + 26px);height:2px;background:var(--line)}
+.journey li.done:not(:last-child)::after{background:var(--accent)}
+.journey button{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;text-align:center}
+.journey .dot{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--panel);border:2px solid var(--line);color:var(--muted);transition:.2s;position:relative}
+.journey .dot svg{width:24px;height:24px}
+.journey li.done .dot{border-color:var(--accent);color:var(--accent)}
+.journey li.active .dot{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 5px var(--accent-soft)}
+.journey .lbl{font-size:12.5px;color:var(--muted);font-weight:500}
+.journey li.active .lbl{color:var(--ink);font-weight:650}
+.journey .num{position:absolute;top:-6px;right:-6px;font-size:10px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+/* ---------- layout ---------- */
+main{max-width:1480px;margin:auto;padding:8px 22px 40px}
+.stage-head{display:grid;grid-template-columns:1fr;gap:10px;margin:10px 0 14px}
+.eyebrow{font-size:11.5px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700;color:var(--accent-ink)}
+.stage-head h2{font:600 30px/1.18 var(--serif);margin:6px 0 8px;letter-spacing:-.3px}
+.stage-head p{margin:0;color:var(--muted);max-width:860px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:11.5px;padding:4px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);white-space:nowrap}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.workbench{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.scene-card{padding:14px 16px 12px;position:relative;overflow:hidden}
+.scene-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.scene-top h3{font:600 15px var(--sans);margin:0 8px 0 0}
+.tag{font-size:10.5px;letter-spacing:.8px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:6px;border:1px solid;white-space:nowrap}
+.tag.calc{color:var(--calc);border-color:color-mix(in srgb,var(--calc) 45%,transparent);background:color-mix(in srgb,var(--calc) 10%,transparent)}
+.tag.illus{color:var(--illus);border-color:color-mix(in srgb,var(--illus) 50%,transparent);border-style:dashed;background:color-mix(in srgb,var(--illus) 8%,transparent)}
+.tag.obs{color:var(--obs);border-color:color-mix(in srgb,var(--obs) 45%,transparent);background:color-mix(in srgb,var(--obs) 10%,transparent)}
+.tagnote{font-size:11.5px;color:var(--muted)}
+#scene{width:100%;height:auto;display:block;border-radius:12px;background:var(--panel2);touch-action:pan-y}
+.playbar{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.play{width:40px;height:40px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:grid;place-items:center;cursor:pointer;flex-shrink:0}
+.play svg{width:18px;height:18px}
+.ghost{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 11px;cursor:pointer;font-size:13px}
+.ghost:hover{border-color:var(--accent)}
+.scrub{flex:1;min-width:160px;position:relative}
+.scrub input{width:100%;accent-color:var(--accent)}
+.marks{position:relative;height:14px;font-size:10px;color:var(--muted)}
+.marks span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.marks span::before{content:"▲";display:block;text-align:center;font-size:8px;color:var(--accent);line-height:8px}
+.clock{font:600 14px/1 var(--sans);font-variant-numeric:tabular-nums;min-width:110px;text-align:right}
+.speed{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:6px 8px;font-size:12.5px}
+.readouts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.sec-label{margin:20px 0 8px}
+.laws{margin-top:22px}
+.bench{max-height:calc(100vh - 92px)}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0}
+.tile .k{font-size:11.5px;color:var(--muted);display:block;line-height:1.3}
+.tile .v{font:600 21px/1.25 var(--sans);font-variant-numeric:tabular-nums;display:block;overflow-wrap:anywhere}
+.tile .u{font-size:11px;color:var(--muted)}
+.tile.hl{border-color:var(--accent);background:color-mix(in srgb,var(--accent-soft) 55%,var(--panel))}
+.explain{margin-top:14px;padding:16px 18px}
+.explain h3{margin:0 0 6px;font:600 16px var(--serif)}
+.explain p{margin:6px 0;color:var(--ink)}
+.explain .warn{background:color-mix(in srgb,var(--heat) 12%,transparent);border-left:3px solid var(--heat);padding:8px 10px;border-radius:6px}
+.explain .good{background:color-mix(in srgb,var(--good) 12%,transparent);border-left:3px solid var(--good);padding:8px 10px;border-radius:6px}
+/* ---------- bench ---------- */
+.bench{padding:14px 16px;position:sticky;top:76px;max-height:calc(100vh - 92px);overflow:auto}
+.bench h3{margin:0 0 4px;font:600 16px var(--serif)}
+.bench .sub{font-size:12px;color:var(--muted);margin:0 0 10px}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.presets button{border:1px solid var(--line);background:var(--panel2);border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer}
+.presets button:hover{border-color:var(--accent);color:var(--accent-ink)}
+.ctl{padding:9px 0;border-top:1px dashed var(--line2)}
+.ctl:first-of-type{border-top:0}
+.ctl label{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+.ctl label .lab{color:var(--ink)}
+.ctl input[type=range]{width:100%;accent-color:var(--accent);margin:6px 0 0}
+.ctl input[type=number]{width:84px;border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:var(--panel);text-align:right;font-variant-numeric:tabular-nums}
+.ctl select{width:100%;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:var(--panel)}
+.ctl .hint{font-size:11.5px;color:var(--muted);margin-top:3px}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:6px}
+.seg button{flex:1;border:0;background:var(--panel);padding:7px 4px;font-size:12px;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed=true]{background:var(--accent);color:#fff;font-weight:600}
+.switch{display:flex;align-items:center;gap:8px;cursor:pointer}
+.switch input{appearance:none;width:38px;height:22px;border-radius:999px;background:var(--line);position:relative;cursor:pointer;transition:.2s;flex-shrink:0;margin:0}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.switch input:checked{background:var(--accent)}
+.switch input:checked::after{left:19px}
+.ladder{display:grid;gap:6px;margin-top:6px}
+.ladder button{all:unset;cursor:pointer;display:grid;grid-template-columns:30px 1fr;gap:8px;align-items:center;padding:7px 9px;border:1px solid var(--line);border-radius:10px;font-size:12px;line-height:1.3;background:var(--panel)}
+.ladder button b{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);font-size:12px}
+.ladder button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent-soft) 60%,var(--panel))}
+.ladder button[aria-pressed=true] b{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ladder button.below b{background:color-mix(in srgb,var(--accent) 25%,var(--panel2))}
+/* ---------- predict ---------- */
+.predict{display:flex;gap:14px;align-items:center;padding:12px 16px;margin-bottom:14px;border-left:5px solid var(--accent);flex-wrap:wrap}
+.predict .q{flex:1;min-width:240px}
+.predict .q b{font:600 15px var(--serif)}
+.predict .q span{display:block;font-size:12.5px;color:var(--muted)}
+.predict input{width:110px;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--panel)}
+.predict .res{font-size:13.5px}
+.btn{border:0;background:var(--accent);color:#fff;border-radius:9px;padding:8px 13px;cursor:pointer;font-weight:600;font-size:13px}
+.btn:disabled{opacity:.5;cursor:default}
+/* ---------- tabs ---------- */
+.tabs{margin-top:18px;padding:0}
+.tablist{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:8px 10px 0;overflow-x:auto}
+.tablist button{all:unset;cursor:pointer;padding:10px 14px;font-size:13.5px;border-radius:10px 10px 0 0;color:var(--muted);white-space:nowrap;border:1px solid transparent;border-bottom:0;margin-bottom:-1px}
+.tablist button[aria-selected=true]{color:var(--ink);font-weight:650;background:var(--panel);border-color:var(--line)}
+.tabpanel{padding:16px 18px}
+.plots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:16px}
+.plot{border:1px solid var(--line2);border-radius:12px;padding:8px;position:relative;background:var(--panel)}
+.plot .ph{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 4px 4px}
+.plot .ph b{font-size:13px;flex:1;min-width:150px}
+.plot .ph button{border:1px solid var(--line);background:var(--panel2);border-radius:6px;font-size:11px;padding:3px 7px;cursor:pointer}
+.plot .svgwrap svg{width:100%;height:auto;display:block}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--panel);font-size:11.5px;padding:6px 8px;border-radius:7px;white-space:nowrap;z-index:5;opacity:0;transition:opacity .1s;font-variant-numeric:tabular-nums}
+.tip.on{opacity:.94}
+.checks{display:grid;gap:8px}
+.check{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--line2);border-radius:10px;background:var(--panel)}
+.check .ic{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:13px;font-weight:700}
+.check .ic.ok{background:var(--good)}.check .ic.no{background:var(--bad)}.check .ic.info{background:var(--calc)}
+.check .nm{font-size:13.5px}
+.check .nm small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.check .val{font:600 13px var(--sans);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.check .val small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.eqs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr));gap:16px}
+.eqbox{border:1px solid var(--line2);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.eqbox h4{margin:0 0 6px;font:600 14.5px var(--serif)}
+.eqbox p,.eqbox li{font-size:13.5px}
+.eqbox ul{padding-left:18px;margin:6px 0}
+.eq{font:16px/1.7 var(--serif);background:var(--panel2);border-radius:8px;padding:8px 12px;margin:8px 0;overflow-x:auto;white-space:nowrap}
+.eq i{font-style:italic}
+.src{font-size:11.5px;color:var(--muted)}
+table.def{width:100%;border-collapse:collapse;font-size:13px}
+table.def th,table.def td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line2);vertical-align:top}
+table.def th{color:var(--muted);font-weight:500;font-size:12px}
+table.def td:first-child{font-family:var(--serif);font-size:15px;white-space:nowrap}
+.notesgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.notesgrid textarea{width:100%;min-height:170px;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--panel);resize:vertical}
+.qlist{margin:6px 0 0;padding-left:20px;color:var(--ink);font-size:13.5px}
+.qlist li{margin:6px 0}
+.trials{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.trials td,.trials th{border-bottom:1px solid var(--line2);padding:6px;text-align:left;vertical-align:top}
+details.kitchen{margin-top:16px;border:1px dashed color-mix(in srgb,var(--obs) 60%,transparent);border-radius:12px;padding:10px 14px;background:color-mix(in srgb,var(--obs) 5%,var(--panel))}
+details.kitchen summary{cursor:pointer;font-weight:600;font-size:14px}
+details.kitchen ol{font-size:13px;padding-left:20px}
+.ktable{border-collapse:collapse;font-size:13px;margin:8px 0}
+.ktable td,.ktable th{padding:4px 6px;border-bottom:1px solid var(--line2)}
+.ktable input{width:90px;border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:var(--panel)}
+.kgrid{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+.kgrid label{font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.kgrid input{width:110px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:var(--panel)}
+.verdict-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+.verdict-table th,.verdict-table td{padding:7px 8px;border-bottom:1px solid var(--line2);text-align:right}
+.verdict-table th:first-child,.verdict-table td:first-child{text-align:left}
+.scen{display:grid;gap:6px;margin-top:6px}
+.ctl .scen label{display:flex;gap:8px;align-items:flex-start;justify-content:flex-start;font-size:12.5px;cursor:pointer}
+footer.nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:22px 0 10px}
+.refs{margin-top:18px;padding:14px 18px;font-size:12.5px;color:var(--muted)}
+.refs h3{font:600 15px var(--serif);color:var(--ink);margin:0 0 6px}
+.refs ol{padding-left:18px;margin:6px 0}
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--ink);max-width:860px;width:calc(100% - 32px);padding:20px}
+dialog::backdrop{background:rgba(20,14,6,.45)}
+dialog textarea{width:100%;height:46vh;font:12px/1.5 ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel2)}
+.busy{position:absolute;inset:0;display:none;place-items:center;background:color-mix(in srgb,var(--panel) 60%,transparent);font-size:13px;color:var(--muted)}
+.busy.on{display:grid}
+@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+/* ---------- laws & equations (the highlight of each stage) ---------- */
+.laws{margin:0 0 18px}
+.laws-head{margin:0 0 10px}.laws-head h3{font:600 22px var(--serif);margin:2px 0 4px}
+.lawgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:14px}
+.law{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--accent);border-radius:16px;padding:14px 16px 12px;box-shadow:var(--shadow);display:flex;flex-direction:column}
+.law.new{border-top-color:var(--water)}
+.lawtop{display:flex;align-items:center;gap:10px}
+.lawtop h4{margin:0;font:600 16px/1.3 var(--serif);flex:1}
+.lawnum{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-ink);font-weight:700;font-size:13px;flex-shrink:0}
+.law.new .lawnum{background:var(--water-soft);color:var(--water)}
+.lawtag{font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:2px 7px;border-radius:6px;white-space:nowrap}
+.lawtag.slides{background:var(--accent-soft);color:var(--accent-ink)}.lawtag.new{background:var(--water-soft);color:var(--water)}
+.big{font:19px/2 var(--serif);text-align:center;background:var(--panel2);border-radius:12px;padding:12px 12px;margin:12px 0 4px;overflow-wrap:anywhere}
+.big.small{font-size:17px;margin-top:6px}
+.big i{font-style:italic}.vec{font-style:normal;font-weight:700}
+.fr{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 .12em;line-height:1.15}
+.fr>span{padding:0 .18em;font-size:.86em}.fr>span:first-child{border-bottom:1.3px solid currentColor;padding-bottom:.08em}.fr>span:last-child{padding-top:.08em}
+.law .words{font-size:14px;margin:8px 0 4px}
+.syms{list-style:none;margin:2px 0 6px;padding:0;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px;color:var(--muted)}
+.syms li::before{content:"• ";color:var(--accent)}
+.law details{margin-top:auto;border-top:1px dashed var(--line2);padding-top:6px}
+.law summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent-ink)}
+.law.new summary{color:var(--water)}
+.law details p{font-size:13.5px;line-height:1.6}
+.lref{font-size:11px;color:var(--muted);margin-top:6px}
+@media (max-width:1100px){.workbench{grid-template-columns:1fr}.bench{position:static;max-height:none}.readouts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:700px){
+  .top-in{padding:8px 16px}.brand small{display:none}.iconbtn .t{display:none}
+  main,.journey{padding-left:16px;padding-right:16px}
+  .stage-head{grid-template-columns:1fr}.chips{justify-content:flex-start}
+  .stage-head h2{font-size:24px}
+  .notesgrid{grid-template-columns:1fr}
+  .clock{min-width:0}
+  .tabpanel{padding:12px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="brand">
+    <svg width="38" height="38" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="var(--accent)"/><ellipse cx="32" cy="33" rx="20" ry="11" transform="rotate(-30 32 33)" fill="#fbf3e2"/><ellipse cx="32" cy="33" rx="9" ry="5" transform="rotate(-30 32 33)" fill="#fff"/><path d="M20 14c3 4-3 6 0 10M30 10c3 4-3 6 0 10M40 14c3 4-3 6 0 10" stroke="#fbf3e2" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".85"/></svg>
+    <div><h1>Rice on the Boil</h1><small>Heat &amp; water transport in cooking rice · MS2280 Project 19 · interactive investigation</small></div>
+  </div>
+  <div class="sp"></div>
+  <a class="iconbtn" href="../Code/checks.html" title="Run the independent verification suite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg><span class="t">Checks</span></a>
+  <button class="iconbtn" id="nbBtn" title="Export your notebook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h11l3 3v13H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span class="t">Notebook</span></button>
+  <button class="iconbtn" id="themeBtn" title="Switch light / dark theme" aria-label="Switch theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 13A9 9 0 1111 3a7 7 0 0010 10z"/></svg><span class="t">Theme</span></button>
+</div></header>
+
+<nav class="journey" aria-label="Stages of the investigation"><ol id="journey"></ol></nav>
+
+<main>
+  <section class="stage-head">
+    <div><div class="eyebrow" id="eyebrow"></div><h2 id="stageTitle"></h2><p id="stageIntro"></p></div>
+  </section>
+
+  <section class="card predict" id="predict"></section>
+
+  <section class="workbench">
+    <div>
+      <div class="card scene-card">
+        <div class="scene-top"><h3 id="sceneTitle">Stage</h3><span id="sceneTags"></span></div>
+        <svg id="scene" viewBox="0 0 760 400" role="img" aria-label="Animated scene"></svg>
+        <div class="busy" id="busy">Calculating…</div>
+        <div class="playbar" id="playbar">
+          <button class="play" id="playBtn" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg></button>
+          <button class="ghost" id="restartBtn" title="Back to t = 0">↺</button>
+          <div class="scrub"><input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Time"><div class="marks" id="marks"></div></div>
+          <select class="speed" id="speed" aria-label="Playback speed"></select>
+          <span class="clock" id="clock">t = 0 s</span>
+        </div>
+      </div>
+    </div>
+    <aside class="card bench" id="bench" aria-label="Lab bench: set the conditions"></aside>
+  </section>
+
+  <div class="sec-label eyebrow">Results</div>
+  <div class="readouts" id="readouts" aria-live="polite"></div>
+  <div class="card explain" id="explain"></div>
+
+  <section class="laws" id="laws" aria-label="Laws and equations for this stage"></section>
+
+  <section class="card tabs">
+    <div class="tablist" role="tablist" id="tablist"></div>
+    <div class="tabpanel" id="tabpanel" role="tabpanel"></div>
+  </section>
+
+  <footer class="nav">
+    <button class="ghost" id="prevBtn">← Previous stage</button>
+    <span class="tagnote" id="footHint"></span>
+    <button class="btn" id="nextBtn">Next stage →</button>
+  </footer>
+
+  <section class="card refs">
+    <h3>Scope, honesty and sources</h3>
+    <p>Every number on this page is <b>calculated</b> by the model in <code>physics.js</code> unless a label says <b>illustrative</b> (chosen to show an idea, e.g. bubbles, flame flicker, grain arrangement) or <b>observed</b> (your own kitchen measurements). Grain fields are one-dimensional (equivalent sphere, cylinder or slab with the grain's volume-to-surface ratio); drawing them on a rice-grain outline (with shading and shine) is a display mapping. Parameters marked “illustrative” lie inside published ranges but were not measured for one rice variety. The model is not fitted to cooking-time data.</p>
+    <ol>
+      <li>Welty, Wicks, Wilson &amp; Rorrer, <i>Fundamentals of Momentum, Heat, and Mass Transfer</i>, 5th ed., Wiley — control-volume balances (Ch. 4, 6), conduction and diffusion. Course slides: <i>Conservation and Transport Equations</i> (S. Bhattacharyya), slides 10, 18, 39–50, 56, 83.</li>
+      <li>Briffaz, A. et al. (2014) Modelling of water transport and swelling associated with starch gelatinization during rice cooking. <i>J. Food Eng.</i> 121, 143–151. — apparent D in native and gelatinized starch.</li>
+      <li>Briffaz, A. et al. (2014) Modelling of brown rice and limited-water cooking modes and its potential use for texture prediction. <i>J. Food Eng.</i> 141, 99–106. — brown rice D.</li>
+      <li>Bello, M., Tolaba, M. P., Suárez, C. — water absorption of rice during soaking; swelling-sphere diffusion model with E<sub>a</sub> ≈ 32.5 kJ/mol (<i>LWT</i> 2004; <i>J. Food Eng.</i> 2010).</li>
+      <li>Lund, D. (1984) Influence of time, temperature, moisture, ingredients and processing conditions on starch gelatinization. <i>CRC Crit. Rev. Food Sci. Nutr.</i> 20, 249–273. Donovan, J. W. (1979) Phase transitions of the starch–water system. <i>Biopolymers</i> 18, 263–275.</li>
+      <li>Choi, Y. &amp; Okos, M. R. (1986) Effects of temperature and composition on the thermal properties of foods. In <i>Food Engineering and Process Applications</i>, Elsevier. — component thermal properties.</li>
+      <li>Crank, J. (1975) <i>The Mathematics of Diffusion</i>, 2nd ed., OUP; Carslaw, H. S. &amp; Jaeger, J. C. (1959) <i>Conduction of Heat in Solids</i>, OUP — analytical checks. Churchill, S. W. (1983) natural convection from spheres. Antoine constants for water (NIST WebBook).</li>
+      <li>ISO 14864:1998 Rice — Evaluation of gelatinization time of kernels during cooking (glass-plate method), used for the optional observation panel.</li>
+    </ol>
+    <p>The idea of a guided, calculate-and-record investigation follows the course's <i>Investigation of Continuity Equation</i> page; this tool's design, physics and code are our own. Built with AI assistance (see the group's AI declaration); all equations and numbers were checked with <code>Code/checks.html</code>.</p>
+  </section>
+</main>
+
+<dialog id="nbDialog">
+  <form method="dialog" style="text-align:right"><button class="ghost">Close</button></form>
+  <h3 style="font:600 18px var(--serif);margin:0 0 6px">Your investigation notebook</h3>
+  <p class="tagnote">Predictions, notes, recorded trials and any kitchen data, ready to paste into the report. Stored only in this browser.</p>
+  <textarea id="nbText" readonly></textarea>
+  <p><a class="btn" id="nbSave" download="rice-investigation-notebook.txt" style="text-decoration:none;display:inline-block">Save as text file</a></p>
+</dialog>
+
+<script src="physics.js"></script>
+<script src="plots.js"></script>
+<script>
+'use strict';
+const P = window.RicePhysics, PL = window.RicePlots, PD = P.defaults();
+const $ = id => document.getElementById(id);
+const esc = PL.esc;
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+function fmt(v, d) { if (v == null || !isFinite(v)) return '—'; d = d == null ? 3 : d; const a = Math.abs(v); if (a !== 0 && (a >= 1e5 || a < 1e-3)) return v.toExponential(Math.max(1, d - 1)).replace('e', '×10^').replace(/\^\+?(-?\d+)/, (m, e) => supNum(e)); return (+v.toPrecision(d)).toLocaleString('en', { maximumFractionDigits: 6 }); }
+function supNum(e) { const m = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' }; return String(e).split('').map(c => m[c] || c).join(''); }
+function fmtT(s) { if (s == null || !isFinite(s)) return '—'; if (s < 1) return s.toFixed(2) + ' s'; if (s < 90) return s.toFixed(1) + ' s'; if (s < 5400) return (s / 60).toFixed(1) + ' min'; return (s / 3600).toFixed(2) + ' h'; }
+function theme() { const t = document.documentElement.dataset.theme; if (t) return t; return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim(); }
+function idxAt(t, time) { let lo = 0, hi = t.length - 1; if (time <= t[0]) return 0; if (time >= t[hi]) return hi; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (t[m] <= time) lo = m; else hi = m; } return lo; }
+function interp(t, y, time) { const i = idxAt(t, time); if (i >= t.length - 1 || y[i + 1] == null) return y[i]; const f = (time - t[i]) / ((t[i + 1] - t[i]) || 1); return y[i] + (y[i + 1] - y[i]) * clamp(f, 0, 1); }
+const wb = X => 100 * X / (1 + X);
+const presetR = (key, geom, custom) => key === 'custom' ? custom * 1e-3 : P.equivalentSize(P.GRAIN_PRESETS[key], geom);
+const placeOptions = Object.keys(P.PLACES).map(k => [k, `${P.PLACES[k].name} — water boils at ${P.placeBoilingPoint(k).toFixed(1)} °C`]);
+const grainOptions = [['long', 'Long slender (Basmati type) 7.0×1.8×1.6 mm'], ['medium', 'Medium (Sona Masoori type) 5.5×2.2×1.7 mm'], ['short', 'Short bold 5.0×2.8×2.0 mm'], ['custom', 'Custom equivalent radius']];
+const geomOptions = [['sphere', 'Equivalent sphere (R = 3V/S)'], ['cylinder', 'Long cylinder (R = 2V/S)'], ['slab', 'Slab (half-thickness = V/S)']];
+
+/* ---------- persistent notebook (this browser only) ---------- */
+const STORE = 'rice-on-the-boil-v1';
+let book = { notes: {}, trials: {}, predictions: {}, kitchen: { soak: { m0: 20, X0: 0.14, T: 25, rows: [] }, glass: { rows: [] } }, visited: [] };
+try { const s = JSON.parse(localStorage.getItem(STORE)); if (s && typeof s === 'object') book = Object.assign(book, s); } catch (e) { }
+function save() { try { localStorage.setItem(STORE, JSON.stringify(book)); } catch (e) { } }
+
+/* ---------- small SVG helpers for scenes (CSS variables keep both themes legible) ---------- */
+const T = (x, y, s, o) => `<text x="${x}" y="${y}" font-size="${(o && o.size) || 12.5}" fill="${(o && o.fill) || 'var(--ink)'}" ${o && o.anchor ? `text-anchor="${o.anchor}"` : ''} ${o && o.weight ? `font-weight="${o.weight}"` : ''} font-family="var(--sans)" paint-order="stroke" stroke="var(--panel2)" stroke-width="${(o && o.halo) || 0}">${s}</text>`;
+const arrow = (x1, y1, x2, y2, col, w) => { const a = Math.atan2(y2 - y1, x2 - x1), L = 8 + (w || 2); return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${w || 2}" stroke-linecap="round"/><path d="M${x2},${y2}L${x2 - L * Math.cos(a - 0.45)},${y2 - L * Math.sin(a - 0.45)}L${x2 - L * Math.cos(a + 0.45)},${y2 - L * Math.sin(a + 0.45)}Z" fill="${col}"/>`; };
+/* Shared gradients and filters for the realistic (illustrative) drawing layer. One scene is on screen at a time. */
+const SCENE_DEFS = `<defs>
+  <linearGradient id="steelG" x1="0" x2="1"><stop offset="0" stop-color="#5f5b56"/><stop offset=".1" stop-color="#bfbab2"/><stop offset=".28" stop-color="#85807a"/><stop offset=".52" stop-color="#e6e2dc"/><stop offset=".78" stop-color="#959089"/><stop offset="1" stop-color="#55514c"/></linearGradient>
+  <linearGradient id="steelV" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#d9d5cf"/><stop offset="1" stop-color="#7d7872"/></linearGradient>
+  <linearGradient id="steelIn" x1="0" x2="1"><stop offset="0" stop-color="#3f3c39"/><stop offset=".5" stop-color="#7c7873"/><stop offset="1" stop-color="#3f3c39"/></linearGradient>
+  <linearGradient id="flameG" x1="0" x2="0" y1="1" y2="0"><stop offset="0" stop-color="#2f62d8"/><stop offset=".28" stop-color="#5d9ff2"/><stop offset=".5" stop-color="#f7c04a"/><stop offset=".8" stop-color="#ef7a2a"/><stop offset="1" stop-color="#e2552b" stop-opacity=".15"/></linearGradient>
+  <linearGradient id="glassG" x1="0" x2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".45"/><stop offset=".12" stop-color="#ffffff" stop-opacity=".06"/><stop offset=".88" stop-color="#ffffff" stop-opacity=".06"/><stop offset="1" stop-color="#ffffff" stop-opacity=".35"/></linearGradient>
+  <radialGradient id="grainRaw" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#f2ede1"/><stop offset="1" stop-color="#d6ccb7"/></radialGradient>
+  <radialGradient id="grainCook" cx=".35" cy=".28" r=".85"><stop offset="0" stop-color="#ffffff" stop-opacity=".98"/><stop offset=".45" stop-color="#f6f3ea" stop-opacity=".82"/><stop offset="1" stop-color="#d3cdbd" stop-opacity=".78"/></radialGradient>
+  <filter id="blurS" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.2"/></filter>
+  <filter id="glowF" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter>
+</defs>`;
+function burner(cx, y, w) {
+  return `<ellipse cx="${cx}" cy="${y + 26}" rx="${w * 0.62}" ry="10" fill="#000" opacity=".12"/>` +
+    `<rect x="${cx - w * 0.6}" y="${y + 2}" width="${w * 1.2}" height="14" rx="4" fill="url(#steelV)"/>` +
+    `<rect x="${cx - w * 0.48}" y="${y + 16}" width="${w * 0.96}" height="20" rx="4" fill="#3e3b38"/>` +
+    `<ellipse cx="${cx}" cy="${y}" rx="${w * 0.42}" ry="7" fill="#2c2a28"/><ellipse cx="${cx}" cy="${y - 1}" rx="${w * 0.36}" ry="5" fill="#55504a"/>`;
+}
+/* Flame size follows the calculated heater power; flicker is illustrative. */
+function flames(cx, y, width, P, phase) {
+  const n = 12, amp = clamp(P / 2500, 0, 1.25); if (amp < 0.02) return ''; let s = '<g>';
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n, x = cx - width * 0.38 + width * 0.76 * t, yy = y - 2 + 3 * Math.sin(Math.PI * t);
+    const flick = 0.78 + 0.22 * Math.sin(phase * 9 + i * 1.7) * Math.sin(phase * 5.3 + i), h = (30 * amp + 3) * flick, wd = 6.5;
+    s += `<path d="M${x - wd},${yy}Q${x - wd * 0.8},${yy - h * 0.55} ${x + 1.5 * Math.sin(phase * 7 + i)},${yy - h}Q${x + wd * 0.8},${yy - h * 0.55} ${x + wd},${yy}Z" fill="url(#flameG)" opacity=".92"/>`;
+  }
+  s += `<ellipse cx="${cx}" cy="${y - 8 * amp}" rx="${width * 0.42}" ry="${10 + 10 * amp}" fill="#f2a33a" opacity="${0.18 * amp}" filter="url(#glowF)"/></g>`;
+  return s;
+}
+/* Number of wisps follows the calculated steam rate; their motion is illustrative. */
+function steam(cx, topY, width, rateGs, phase) {
+  const n = Math.round(clamp(rateGs * 14, 0, 20)); let s = '<g filter="url(#blurS)">';
+  for (let i = 0; i < n; i++) {
+    const u = ((phase * 0.3 + i / n) % 1), x = cx - width / 2 + ((i * 53) % width) + 10 * Math.sin(u * 5 + i), y = topY - u * 130;
+    s += `<ellipse cx="${x}" cy="${y}" rx="${7 + 16 * u}" ry="${5 + 10 * u}" fill="#ffffff" opacity="${0.5 * (1 - u) * (u < 0.1 ? u * 10 : 1)}"/>`;
+  }
+  s += '</g>';
+  for (let i = 0; i < Math.min(n, 8); i++) { const u = ((phase * 0.3 + i / Math.max(1, n) + 0.05) % 1), x = cx - width / 2 + ((i * 53) % width), y = topY - u * 120; s += `<path d="M${x},${y}q${7 * Math.sin(u * 6 + i)},-11 0,-22q${-7 * Math.sin(u * 6 + i)},-11 0,-22" fill="none" stroke="var(--muted)" stroke-width="${2 - u * 1.3}" stroke-linecap="round" opacity="${0.4 * (1 - u)}"/>`; }
+  return s;
+}
+function bubbles(x0, x1, yTop, yBot, intensity, phase) {
+  const n = Math.round(clamp(intensity, 0, 1) * 30); let s = '';
+  for (let i = 0; i < n; i++) { const u = (phase * 0.6 + i * 0.137) % 1, x = x0 + ((i * 71) % Math.max(1, x1 - x0)) + 2 * Math.sin(phase * 4 + i), y = yBot - u * (yBot - yTop), r = 1.5 + 3 * u;
+    s += `<circle cx="${n2s(x)}" cy="${n2s(y)}" r="${n2s(r)}" fill="#ffffff" fill-opacity=".12" stroke="#ffffff" stroke-opacity=".8" stroke-width="1.1"/><circle cx="${n2s(x - r * 0.35)}" cy="${n2s(y - r * 0.35)}" r="${n2s(r * 0.28)}" fill="#ffffff" opacity=".9"/>`; }
+  return s;
+}
+const n2s = v => Math.round(v * 10) / 10;
+/* Steel pot drawn as a cut-away: back wall, then (caller draws water and grains), then front walls, rim and handles. */
+function potBack(x0, x1, yTop, yBot) { return `<rect x="${x0}" y="${yTop}" width="${x1 - x0}" height="${yBot - yTop}" rx="6" fill="url(#steelIn)" opacity=".35"/>`; }
+function potFront(x0, x1, yTop, yBot) {
+  const w = 9, cx = (x0 + x1) / 2, rx = (x1 - x0) / 2;
+  return `<rect x="${x0 - w}" y="${yTop}" width="${w}" height="${yBot - yTop + 4}" fill="url(#steelG)"/><rect x="${x1}" y="${yTop}" width="${w}" height="${yBot - yTop + 4}" fill="url(#steelG)"/>` +
+    `<path d="M${x0 - w},${yBot}Q${x0 - w},${yBot + 12} ${x0 + 8},${yBot + 12}H${x1 - 8}Q${x1 + w},${yBot + 12} ${x1 + w},${yBot}Z" fill="url(#steelG)"/>` +
+    `<ellipse cx="${cx}" cy="${yTop}" rx="${rx + w / 2}" ry="7" fill="none" stroke="url(#steelG)" stroke-width="${w}"/><ellipse cx="${cx}" cy="${yTop - 1}" rx="${rx + w}" ry="9" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="1"/>` +
+    `<rect x="${x0 - w - 34}" y="${yTop + 16}" width="36" height="13" rx="6.5" fill="url(#steelV)" stroke="#5f5b56" stroke-width="1"/><rect x="${x1 + w - 2}" y="${yTop + 16}" width="36" height="13" rx="6.5" fill="url(#steelV)" stroke="#5f5b56" stroke-width="1"/>`;
+}
+function potLid(x0, x1, yTop, kind) {
+  const cx = (x0 + x1) / 2, rx = (x1 - x0) / 2 + 12;
+  if (kind === 'cooker') return `<path d="M${cx - rx},${yTop} Q${cx},${yTop - 46} ${cx + rx},${yTop} Z" fill="url(#steelG)" stroke="#5f5b56" stroke-width="2"/><rect x="${cx - 9}" y="${yTop - 50}" width="18" height="22" rx="4" fill="#4a4743"/><circle cx="${cx}" cy="${yTop - 55}" r="7" fill="var(--heat)"/>` + T_(cx, yTop - 66, 'weight valve', 10.5, 'middle');
+  return `<path d="M${cx - rx},${yTop} Q${cx},${yTop - 32} ${cx + rx},${yTop} Z" fill="#cfe3ee" fill-opacity=".35" stroke="#9aa9b2" stroke-width="2.5"/><path d="M${cx - rx * 0.6},${yTop - 9} Q${cx - rx * 0.2},${yTop - 22} ${cx + rx * 0.15},${yTop - 23}" fill="none" stroke="#ffffff" stroke-opacity=".75" stroke-width="2.5" stroke-linecap="round"/><rect x="${cx - 14}" y="${yTop - 34}" width="28" height="10" rx="5" fill="#3e3b38"/>`;
+}
+/* One rice grain for pot/beaker scenes. Size (scale), translucency (G) and tint (X) come from the model. */
+function riceGrain(x, y, L, W, ang, G, X, core) {
+  const p = PL.ricePath(0, 0, L, W), cooked = G > 0.5, tint = clamp((X - 0.14) / 2.5, 0, 1);
+  let s = `<g transform="translate(${n2s(x)} ${n2s(y)}) rotate(${n2s(ang)})"><path d="${PL.ricePath(1.2, 1.6, L, W)}" fill="#000" opacity=".12"/>` +
+    `<path d="${p}" fill="url(#${cooked ? 'grainCook' : 'grainRaw'})" stroke="#b8ae99" stroke-width=".5"/>`;
+  if (tint > 0.05) s += `<path d="${p}" fill="#9fc4cf" opacity="${n2s(0.22 * tint * 10) / 10}"/>`;
+  if (core && G < 0.9) s += `<path d="${PL.ricePath(0, 0, L * 0.72 * (1 - G), W * 0.72 * (1 - G))}" fill="#ffffff" opacity=".92"/>`;
+  return s + `<path d="M${-L * 0.6},${-W * 0.35}Q0,${-W * 0.7} ${L * 0.6},${-W * 0.3}" fill="none" stroke="#ffffff" stroke-opacity="${cooked ? 0.8 : 0.45}" stroke-width="1"/></g>`;
+}
+function thermometer(x, y0, y1, T, Tmin, Tmax, Tb) {
+  const sy = v => y1 - (y1 - y0) * clamp((v - Tmin) / (Tmax - Tmin), 0, 1);
+  let s = `<rect x="${x - 7}" y="${y0 - 6}" width="14" height="${y1 - y0 + 12}" rx="7" fill="var(--panel)" stroke="var(--muted)"/><circle cx="${x}" cy="${y1 + 12}" r="12" fill="${PL.heatColor(T, 20, 125)}" stroke="var(--muted)"/>`;
+  s += `<rect x="${x - 3.5}" y="${sy(T)}" width="7" height="${y1 + 4 - sy(T)}" fill="${PL.heatColor(T, 20, 125)}"/>`;
+  for (let v = 20; v <= 120; v += 20) s += `<line x1="${x + 8}" y1="${sy(v)}" x2="${x + 13}" y2="${sy(v)}" stroke="var(--muted)"/>` + T_(x + 16, sy(v) + 4, v + '°', 10);
+  if (Tb != null) s += `<line x1="${x - 16}" y1="${sy(Tb)}" x2="${x + 8}" y2="${sy(Tb)}" stroke="var(--heat)" stroke-width="2" stroke-dasharray="3 2"/>` + T_(x - 20, sy(Tb) + 4, `T_b ${Tb.toFixed(1)}°`, 10.5, 'end', 'var(--heat)');
+  return s;
+}
+function T_(x, y, s, size, anchor, fill) { return `<text x="${x}" y="${y}" font-size="${size || 11}" fill="${fill || 'var(--muted)'}" font-family="var(--sans)" ${anchor ? `text-anchor="${anchor}"` : ''}>${s}</text>`; }
+function cbar(x, y, w, cmap, minL, maxL, label, uid) { return PL.colorbar({ x, y, w, cmap, minLabel: minL, maxLabel: maxL, label, uid, theme: theme() }); }
+/* random-but-fixed grain layout for pot drawings (illustrative positions) */
+const LAYOUT = (() => { let s = 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647; return Array.from({ length: 90 }, () => ({ u: r(), v: r(), a: r() * 180 })); })();
+
+/* =====================================================================
+   STAGES
+   ===================================================================== */
+const ICONS = {
+  pot: '<path d="M4 10h16v7a4 4 0 01-4 4H8a4 4 0 01-4-4z"/><path d="M2 10h20M9 6c1-1.5-1-2.5 0-4M14 6c1-1.5-1-2.5 0-4"/>',
+  grain: '<ellipse cx="12" cy="12" rx="9" ry="5.5" transform="rotate(-30 12 12)"/><path d="M12 8v5l2.5 1.5"/>',
+  drop: '<path d="M12 3s6 6.5 6 11a6 6 0 01-12 0c0-4.5 6-11 6-11z"/><path d="M9.5 14.5a2.5 2.5 0 002.5 2.5"/>',
+  race: '<path d="M4 21V4M4 4h12l-2 4 2 4H4"/>',
+  cook: '<ellipse cx="12" cy="13" rx="9" ry="6"/><ellipse cx="12" cy="13" rx="3.5" ry="2.3" fill="currentColor" opacity=".35"/><path d="M8 4c1 1.5-1 2.5 0 4M16 4c1 1.5-1 2.5 0 4"/>',
+  pot2: '<path d="M4 9h16v8a4 4 0 01-4 4H8a4 4 0 01-4-4z"/><circle cx="9" cy="15" r="1.3"/><circle cx="13" cy="16" r="1.3"/><circle cx="15.5" cy="13.5" r="1.3"/><path d="M2 9h20"/>',
+  verdict: '<path d="M12 3v18M5 7h14M5 7l-3 7a3 3 0 006 0zM19 7l-3 7a3 3 0 006 0z"/>'
+};
+const BRIEF = { a: 'heat & water during soaking, heating, cooking', b: 'surrounding water vs grain', c: 'soaking & grain size', d: 'balances, scaling, sources', e: 'swelling & material change', f: 'no universal cooking time' };
+
+/* =====================================================================
+   LAWS & EQUATIONS — the physics highlighted at the top of every stage.
+   src: 'slides' (from the course notes, with slide numbers) or 'new' (a concept beyond the notes, explained in depth).
+   ===================================================================== */
+const F = (n, d) => `<span class="fr"><span>${n}</span><span>${d}</span></span>`;
+const pd_ = (a, b) => F('∂' + a, '∂' + b), dd = (a, b) => F('d' + a, 'd' + b);
+const vb = s => `<b class="vec">${s}</b>`;
+const LAWS = {
+pot: [
+  { name: 'Conservation of energy for a control volume', src: 'slides', ref: 'Conservation slide 10; Momentum–Energy slides 51–55',
+    eq: `${dd('<i>E</i><sub>CV</sub>', '<i>t</i>')} = <i>Q̇</i><sub>in</sub> − <i>Q̇</i><sub>out</sub> + Σ<i>ṁ</i><sub>in</sub><i>h</i><sub>in</sub> − Σ<i>ṁ</i><sub>out</sub><i>h</i><sub>out</sub>`,
+    eq2: `${dd('', '<i>t</i>')}[(<i>M c</i><sub>w</sub> + <i>C</i><sub>v</sub>)<i>T</i>] = <i>P</i> − <i>UA</i>(<i>T</i> − <i>T</i><sub>∞</sub>) − <i>ṁ</i><sub>ev</sub>(<i>c</i><sub>w</sub><i>T</i> + <i>h</i><sub>fg</sub>)`,
+    words: 'Accumulation = in − out. The pot’s stored energy changes only because heat crosses its boundary and steam carries enthalpy away.',
+    sym: ['<i>E</i><sub>CV</sub> stored energy (J)', '<i>P</i> heat from the stove (W)', '<i>UA</i> loss conductance (W/K)', '<i>ṁ</i><sub>ev</sub> steam flow (kg/s)', '<i>h</i><sub>fg</sub> latent heat (J/kg)'],
+    deep: 'This is slide 10’s balance d/dt∫C dV = −∮J·n dA + ∫S dV with C = energy per volume and no source. Steam leaving the pot carries <i>enthalpy</i> h = c<sub>w</sub>T + h<sub>fg</sub>, not just internal energy: pushing matter across an open boundary needs flow work p/ρ, which enthalpy already includes (energy slides 53–54). Temperature (K), stored energy (J) and heat rate (W = J/s) are three different quantities; the balance links the last two, and the heat capacity links the first two.' },
+  { name: 'Conservation of mass', src: 'slides', ref: 'Conservation slides 10, 12–13',
+    eq: `${dd('<i>M</i>', '<i>t</i>')} = −<i>ṁ</i><sub>ev</sub>`,
+    words: 'The liquid in the pot decreases at exactly the rate steam leaves.',
+    sym: ['<i>M</i> liquid water in the pot (kg)', '<i>ṁ</i><sub>ev</sub> evaporation rate (kg/s)'],
+    deep: 'At a rolling boil the temperature is steady but the mass is not. “Steady” always refers to a chosen quantity (slide 12): here dT/dt = 0 while dM/dt &lt; 0.' },
+  { name: 'Boiling point: Clausius–Clapeyron relation', src: 'new', ref: 'New concept (phase equilibrium)',
+    eq: `${dd('<i>p</i><sub>sat</sub>', '<i>T</i>')} = ${F('<i>h</i><sub>fg</sub> <i>p</i><sub>sat</sub>', '<i>R</i><sub>v</sub> <i>T</i>²')}   ⇒   ln ${F('<i>p</i>', '<i>p</i><sub>0</sub>')} = −${F('<i>h</i><sub>fg</sub>', '<i>R</i><sub>v</sub>')}(${F('1', '<i>T</i><sub>b</sub>')} − ${F('1', '<i>T</i><sub>b0</sub>')})`,
+    words: 'Water boils when its vapour pressure equals the pressure above it. Lower pressure (mountains) means a lower boiling point; a pressure cooker raises it.',
+    sym: ['<i>p</i><sub>sat</sub> vapour pressure (Pa)', '<i>T</i><sub>b</sub> boiling point (K)', '<i>R</i><sub>v</sub> = 461.5 J/(kg·K), gas constant of water vapour'],
+    deep: 'At equilibrium between liquid and vapour, both phases have the same Gibbs energy per kg. Moving along the boiling curve keeps them equal, giving the Clapeyron equation dp/dT = h<sub>fg</sub>/(T Δv). The vapour is nearly an ideal gas and v<sub>liquid</sub> ≪ v<sub>vapour</sub>, so Δv ≈ R<sub>v</sub>T/p, which gives the form above. <b>Why the temperature stops rising:</b> a pure substance with two phases at fixed pressure has no freedom left (Gibbs phase rule), so T is fixed. Added energy breaks hydrogen bonds to make vapour (latent heat) instead of raising T. The model uses the more accurate empirical Antoine fit log₁₀p = A − B/(C + T) and checks it against Clausius–Clapeyron. Air pressure falls with altitude as p(z) = 101 325 (1 − 2.26×10⁻⁵ z)<sup>5.256</sup> Pa.' },
+  { name: 'Heat loss: Newton’s law of cooling', src: 'new', ref: 'New concept (convective surface loss)',
+    eq: `<i>Q̇</i><sub>loss</sub> = <i>U A</i> (<i>T</i> − <i>T</i><sub>∞</sub>)`,
+    words: 'The hotter the pot is than the kitchen, the faster it loses heat.',
+    sym: ['<i>U</i> overall heat-transfer coefficient (W/m²K)', '<i>A</i> outer area (m²)', '<i>T</i><sub>∞</sub> room temperature'],
+    deep: 'U lumps convection and radiation from the walls and lid into one linear coefficient. A lid lowers U and also blocks evaporation. Below boiling, evaporation follows the mass-transfer analogy ṁ = k<sub>m</sub>A(ρ<sub>v,sat</sub>(T) − ρ<sub>v,room</sub>): a vapour-density difference drives a vapour flux, just as a temperature difference drives heat.' }
+],
+conduct: [
+  { name: 'Fourier’s law of heat conduction', src: 'slides', ref: 'Conservation slides 48–49',
+    eq: `${vb('q')} = −<i>k</i> ∇<i>T</i>`,
+    words: 'Heat flows from hot to cold, at a rate proportional to the temperature gradient.',
+    sym: [vb('q') + ' heat flux (W/m²)', '<i>k</i> thermal conductivity (W/m·K)', '∇<i>T</i> temperature gradient (K/m)'],
+    deep: 'The minus sign makes heat flow down the gradient. It is a constitutive law, a property of the material, not a conservation law; conservation alone cannot give the flux (slide 39).' },
+  { name: 'Heat (diffusion) equation', src: 'slides', ref: 'Conservation slides 49–50',
+    eq: `ρ<i>c</i> ${pd_('<i>T</i>', '<i>t</i>')} = −∇·${vb('q')}   ⇒   ${pd_('<i>T</i>', '<i>t</i>')} = α ∇²<i>T</i>,   α = ${F('<i>k</i>', 'ρ<i>c</i>')}`,
+    words: 'Energy accumulates where more heat flows in than out. Substituting Fourier’s law gives the diffusion equation.',
+    sym: ['ρ<i>c</i> volumetric heat capacity (J/m³K)', 'α thermal diffusivity (m²/s)'],
+    deep: 'The local energy balance (slide 49) with no heating source. α combines how well a material conducts (k) with how much heat it must store to warm up (ρc). A large α means temperature changes spread quickly.' },
+  { name: 'Shell balance in a sphere', src: 'slides', ref: 'Cube balance, slides 19–25, done on a spherical shell',
+    eq: `${pd_('<i>T</i>', '<i>t</i>')} = ${F('α', '<i>r</i><sup><i>m</i></sup>')} ${pd_('', '<i>r</i>')}(<i>r</i><sup><i>m</i></sup> ${pd_('<i>T</i>', '<i>r</i>')}),   <i>m</i> = 0 slab, 1 cylinder, 2 sphere`,
+    words: 'The same balance as the slides’ small cube, but on a thin spherical shell, because a grain is round.',
+    sym: ['<i>r</i> distance from the centre (m)', '<i>m</i> geometry exponent'],
+    deep: 'Take a shell from r to r + Δr. Heat in at r: 4πr²q(r). Heat out at r + Δr: 4π(r+Δr)²q(r+Δr). Divide in − out by the shell volume 4πr²Δr and let Δr → 0: this gives −(1/r²)∂(r²q)/∂r, the radial form of −∇·q. The r² appears because the area grows with radius. Each shell of the computer model is exactly this finite control volume.' },
+  { name: 'Convective surface & Biot number', src: 'new', ref: 'New concept (boundary condition and resistance ratio)',
+    eq: `−<i>k</i> ${pd_('<i>T</i>', '<i>r</i>')}|<sub><i>R</i></sub> = <i>h</i>(<i>T</i><sub>s</sub> − <i>T</i><sub>w</sub>),     Bi = ${F('<i>hR</i>', '<i>k</i>')} = ${F('<i>R</i>/<i>k</i>', '1/<i>h</i>')}`,
+    words: 'Heat arriving at the surface must cross both a water layer and the grain itself. Bi compares the two resistances.',
+    sym: ['<i>h</i> water-to-grain coefficient (W/m²K)', '<i>T</i><sub>s</sub>, <i>T</i><sub>w</sub> surface and water temperature'],
+    deep: 'Think of an electrical circuit: resistance 1/h at the surface in series with R/k inside. If Bi &lt; 0.1 the inside resistance is negligible, the grain stays uniform and the <b>lumped model</b> dT/dt = (hA/ρcV)(T<sub>w</sub> − T) works, giving a simple exponential. For rice in water Bi is several units, so the centre lags the surface and a spatial model is needed. <b>Nusselt number:</b> Nu = hD/k<sub>w</sub>. For a sphere in perfectly still water, solving conduction around it gives T ∝ 1/r and Nu = 2 exactly, so tiny grains are always well coupled to the water.' },
+  { name: 'Fourier number & diffusion time', src: 'slides', ref: 'Conservation slide 56',
+    eq: `Fo = ${F('α<i>t</i>', '<i>R</i>²')},     <i>t</i><sub>d</sub> ~ ${F('<i>R</i>²', 'α')}`,
+    words: 'Diffusion time grows with size squared: double the grain, four times the time.',
+    sym: ['Fo dimensionless time', '<i>t</i><sub>d</sub> characteristic diffusion time (s)'],
+    deep: 'Heat penetrates a depth δ ~ √(αt) in time t. Setting δ = R gives t ~ R²/α. The grain is nearly heated through once Fo ≈ 0.3–0.5.' }
+],
+soak: [
+  { name: 'Species (water) conservation', src: 'slides', ref: 'Conservation slides 40–41',
+    eq: `${pd_('(ρ<i>w</i><sub>A</sub>)', '<i>t</i>')} + ∇·(ρ${vb('u')}<i>w</i><sub>A</sub> + ${vb('j')}<sub>A</sub>) = <i>r</i><sub>A</sub>`,
+    words: 'Water accumulates where more water flows in than out. Nothing creates or destroys it here (r<sub>A</sub> = 0).',
+    sym: ['<i>w</i><sub>A</sub> water mass fraction', vb('j') + '<sub>A</sub> diffusive flux (kg/m²s)', '<i>r</i><sub>A</sub> reaction source (here 0)'],
+    deep: 'Total flux = transport by bulk motion + transport relative to the bulk (slide 39). Inside a grain there is no bulk flow of the solid relative to itself, so all water movement is the relative (diffusive) part.' },
+  { name: 'Fick’s law, written for a grain', src: 'slides', ref: 'Conservation slides 40, 44, 47 (reference velocity)',
+    eq: `${vb('j')}<sub>A</sub> = −ρ<i>D</i>∇<i>w</i><sub>A</sub>   ⇒   ${vb('j')} = −ρ<sub>d</sub> <i>D</i> ∇<i>X</i>`,
+    words: 'Water moves from wetter to drier regions. In food science moisture is measured per kg of dry solid (X), which turns Fick’s law into this simple form.',
+    sym: ['<i>X</i> = <i>w</i>/(1−<i>w</i>) dry-basis moisture (kg/kg)', 'ρ<sub>d</sub> dry solid per volume (kg/m³)', '<i>D</i> diffusivity (m²/s)'],
+    deep: 'Slide 47 warns that a flux depends on its reference velocity. The slides’ j<sub>A</sub> is measured relative to the mass-average velocity. Relative to the <i>solid</i> (which is what matters in a grain) the flux is j<sub>A</sub>/(1 − w). With ρ = ρ<sub>d</sub>(1 + X) and ∇w = ∇X/(1 + X)², every factor cancels and the flux becomes −ρ<sub>d</sub>D∇X. Same D, different variable and frame.' },
+  { name: 'Diffusion equation with its conditions', src: 'slides', ref: 'Conservation slide 56 (same form as heat)',
+    eq: `${pd_('<i>X</i>', '<i>t</i>')} = ${F('<i>D</i>', '<i>r</i>²')} ${pd_('', '<i>r</i>')}(<i>r</i>² ${pd_('<i>X</i>', '<i>r</i>')}),   <i>X</i>(<i>r</i>,0) = <i>X</i><sub>0</sub>,   <i>X</i>(<i>R</i>,<i>t</i>) = <i>X</i><sub>nat</sub>`,
+    words: 'Start dry inside; the surface touching water is instantly at its soaking capacity.',
+    sym: ['<i>X</i><sub>0</sub> starting moisture', '<i>X</i><sub>nat</sub> soaking capacity of raw starch'],
+    deep: 'Mathematically identical to heating a sphere with a fixed surface temperature, so Crank’s exact series solution exists. The model is checked against it to 0.1 %. The surface condition is a <i>local equilibrium</i>: the surface layer is assumed to be saturated as soon as it touches liquid water.' },
+  { name: 'Early uptake grows like √t', src: 'new', ref: 'New concept (penetration depth)',
+    eq: `δ ~ √(<i>Dt</i>),     ${F('<i>M</i><sub>t</sub>', '<i>M</i><sub>∞</sub>')} ≈ ${F('<i>S</i>', '<i>V</i>')}·2${'√'}(${F('<i>Dt</i>', 'π')})   (sphere: 6√(Fo/π))`,
+    words: 'At first only a thin outer layer fills, and that layer thickens like √time, so the uptake also grows like √t.',
+    sym: ['δ penetration depth (m)', '<i>S</i>/<i>V</i> surface-to-volume ratio (1/m)'],
+    deep: 'At early times the wet layer is much thinner than the grain, so the surface looks flat and the inside looks infinitely deep. The solution for that case is an error-function profile with thickness ∝ √(Dt). Water taken up = surface area × thickness, hence ∝ S/V·√t. This is why plotting uptake against √t gives a straight line at first. It also explains why grains with a higher surface-to-volume ratio (thin, slender grains) soak faster.' },
+  { name: 'Arrhenius law for diffusivity', src: 'new', ref: 'New concept (thermally activated transport)',
+    eq: `<i>D</i>(<i>T</i>) = <i>D</i><sub>0</sub> exp(−${F('<i>E</i><sub>a</sub>', '<i>R</i><sub>g</sub><i>T</i>')})`,
+    words: 'Warm water soaks faster: water molecules need energy to hop through the starch network.',
+    sym: ['<i>E</i><sub>a</sub> activation energy (J/mol)', '<i>R</i><sub>g</sub> = 8.314 J/(mol·K)', '<i>T</i> absolute temperature (K)'],
+    deep: 'A water molecule moves through the starch–protein matrix by jumping between sites. Only molecules with enough thermal energy (fraction ∝ the Boltzmann factor e<sup>−E<sub>a</sub>/R<sub>g</sub>T</sup>) can jump. With E<sub>a</sub> ≈ 32.5 kJ/mol, D roughly doubles for every 15 K rise near room temperature.' }
+],
+race: [
+  { name: 'One equation, two quantities', src: 'slides', ref: 'Conservation slide 56',
+    eq: `${pd_('φ', '<i>t</i>')} = Γ ∇²φ   ⇒   <i>t</i><sub>d</sub> ~ ${F('<i>L</i>²', 'Γ')}`,
+    words: 'Temperature (Γ = α) and moisture (Γ = D) both diffuse, and each has its own time scale.',
+    sym: ['φ = <i>T</i> or <i>X</i>', 'Γ = α or <i>D</i> (m²/s)', '<i>L</i> distance (m)'],
+    deep: 'Because the equations have the same form, the ratio of their time scales is just the ratio of the diffusivities.' },
+  { name: 'Lewis number', src: 'slides', ref: 'Conservation slide 56 (Pr, Sc, Le)',
+    eq: `Le = ${F('α', '<i>D</i>')}   ⇒   ${F('<i>t</i><sub>water</sub>', '<i>t</i><sub>heat</sub>')} ~ Le,     ${F('δ<sub>heat</sub>', 'δ<sub>water</sub>')} ~ √Le`,
+    words: 'Heat diffuses through a rice grain hundreds of times faster than water, so in the same time heat travels about twenty times further.',
+    sym: ['α thermal diffusivity', '<i>D</i> water diffusivity'],
+    deep: 'Le ≈ 350 for rice in boiling water. In a <b>series process</b>, the slowest step controls the overall rate, just like the largest resistance in a series circuit. Here that is water transport, so cooking time is governed by D, not by α.' },
+  { name: 'Similar form ≠ same physics', src: 'slides', ref: 'Conservation slides 56–57',
+    eq: `−Γ∇(ρψ) ≠ −ρΓ∇ψ   when   ∇ρ ≠ 0`,
+    words: 'The slides warn that equations that look alike are not physically equivalent. The table below lists where heat and water really differ.',
+    sym: ['ψ property per unit mass', 'ρ density'],
+    deep: 'Heat has a convective surface condition; water has an equilibrium condition, and that equilibrium capacity itself changes as starch gelatinizes. α is nearly constant; D depends on temperature, moisture and starch state. The grain’s boundary moves for water (swelling) but is fixed for heat. The water flux is measured relative to the solid, not to the mass-average velocity.' }
+],
+cook: [
+  { name: 'Moving boundary: transport identity / Reynolds transport theorem', src: 'slides', ref: 'Conservation slides 18, 32–34',
+    eq: `${dd('', '<i>t</i>')}∫<sub><i>V</i>(<i>t</i>)</sub> <i>C</i> d<i>V</i> = ∫<sub><i>V</i>(<i>t</i>)</sub> ${pd_('<i>C</i>', '<i>t</i>')} d<i>V</i> + ∮<sub>∂<i>V</i>(<i>t</i>)</sub> <i>C</i> ${vb('w')}·${vb('n')} d<i>A</i>`,
+    words: 'A swelling grain is a control volume whose boundary moves. The surface term counts the volume swept as the grain grows.',
+    sym: ['<i>C</i> water per unit volume', vb('w') + ' boundary velocity (m/s)', vb('n') + ' outward normal'],
+    deep: 'If the boundary moves with the solid (w = velocity of the solid), only the flux <i>relative</i> to the solid crosses it (slide 33: (u − w)·n). The model uses exactly this: each computational shell holds a fixed mass of dry solid and moves with it, so only diffusion crosses its faces and the moving-boundary term is handled exactly.' },
+  { name: 'Swelling by volume additivity', src: 'new', ref: 'New concept (mixture volume)',
+    eq: `<i>V</i><sub>shell</sub> = <i>m</i><sub>s</sub> (${F('1', 'ρ<sub>s</sub>')} + ${F('<i>X</i>', 'ρ<sub>w</sub>')})   ⇒   ${F('<i>R</i>', '<i>R</i><sub>0</sub>')} = (${F('<i>V</i>', '<i>V</i><sub>0</sub>')})<sup>1/3</sup>`,
+    words: 'Each bit of grain grows by the volume of the water it absorbs, so the grain swells as it cooks.',
+    sym: ['<i>m</i><sub>s</sub> dry solid in a shell (kg)', 'ρ<sub>s</sub>, ρ<sub>w</sub> densities of solid and water'],
+    deep: 'Assumes the solid and water volumes simply add (no pores, no shrinkage on mixing). Cooked rice holds about 2.5 kg of water per kg of solid, so its volume grows about four times and its radius about 1.5 times. A larger grain means a longer path to the core, which is why adding swelling to the model (rung L3) slows cooking the most.' },
+  { name: 'Starch gelatinization kinetics', src: 'new', ref: 'New concept (a phase change that behaves like a reaction)',
+    eq: `${pd_('<i>G</i>', '<i>t</i>')} = <i>k</i><sub>g</sub>(<i>T</i>) <i>f</i>(<i>X</i>) (1 − <i>G</i>),     <i>k</i><sub>g</sub> = <i>k</i><sub>0</sub> exp(−${F('<i>E</i><sub>g</sub>', '<i>R</i><sub>g</sub><i>T</i>')})`,
+    words: 'Raw starch turns into gelatinized starch at a rate that needs both heat (above about 68 °C) and water.',
+    sym: ['<i>G</i> degree of gelatinization (0 raw → 1 cooked)', '<i>k</i><sub>g</sub> rate constant (1/s)', '<i>f</i>(<i>X</i>) water availability (0 → 1)'],
+    deep: '<b>What it is:</b> starch is stored in granules with tightly ordered, partly crystalline regions of amylopectin double helices. That order makes raw rice hard and makes it scatter light (white and opaque). When water is present and the temperature passes the onset, water penetrates the ordered regions and they melt. The granules swell, lose their order (and birefringence) and become soft and translucent; the white core disappears. <b>Why first-order:</b> each remaining raw region converts with the same probability per unit time, so the rate ∝ (1 − G), like a first-order reaction (the generation/consumption term of slides 10–11). The rate rises steeply with temperature (Arrhenius). Without enough water the transition cannot complete, hence f(X).' },
+  { name: 'Energy balance with a heat sink', src: 'slides', ref: 'Conservation slide 48 (source term s<sub>T</sub>)',
+    eq: `${pd_('', '<i>t</i>')}[ρ<sub>d</sub>(<i>c</i><sub>s</sub> + <i>X c</i><sub>w</sub>)<i>T</i>] = ∇·(<i>k</i>∇<i>T</i>) − ∇·(<i>c</i><sub>w</sub><i>T</i>${vb('j')}) − ρ<sub>d</sub>Δ<i>H</i><sub>gel</sub> ${pd_('<i>G</i>', '<i>t</i>')}`,
+    words: 'Conduction, plus heat carried in by the absorbed water, minus heat used up by gelatinization.',
+    sym: ['Δ<i>H</i><sub>gel</sub> gelatinization enthalpy (J/kg)', '<i>c</i><sub>s</sub>, <i>c</i><sub>w</sub> specific heats'],
+    deep: 'Gelatinization absorbs about 11 J/g, small compared with the roughly 300 J/g needed to heat the grain, so it barely slows heating. Heat carried by the incoming water is also small: its Péclet number vR/α is about 0.04. So conduction dominates heat transport.' },
+  { name: 'A surface capacity that changes', src: 'new', ref: 'New concept (evolving interface equilibrium)',
+    eq: `<i>X</i>(<i>R</i>,<i>t</i>) = <i>X</i><sub>nat</sub> + <i>G</i><sub>s</sub>(<i>X</i><sub>gel</sub> − <i>X</i><sub>nat</sub>)`,
+    words: 'Raw starch at the surface holds little water; once it gelatinizes, it can hold much more.',
+    sym: ['<i>G</i><sub>s</sub> gelatinization at the surface', '<i>X</i><sub>gel</sub> capacity of gelatinized starch'],
+    deep: 'This is a feedback. Heat lets the surface gelatinize, which raises its water capacity, which drives more water inward, which lets deeper layers gelatinize. It is the reason soaking (no gelatinization) stops at a low moisture while cooking keeps going.' }
+],
+pot2: [
+  { name: 'Two coupled control volumes: mass', src: 'slides', ref: 'Conservation slides 10, 12, 59',
+    eq: `${dd('<i>M</i>', '<i>t</i>')} = −<i>N ṁ</i><sub>g</sub> − <i>ṁ</i><sub>ev</sub>,     ${dd('', '<i>t</i>')}(<i>N m</i><sub>w,grain</sub>) = <i>N ṁ</i><sub>g</sub>`,
+    words: 'The free water loses water to the grains and to steam; the grains gain exactly what they absorb.',
+    sym: ['<i>M</i> free water (kg)', '<i>N</i> number of grains', '<i>ṁ</i><sub>g</sub> water into one grain (kg/s)'],
+    deep: 'Adding the two balances, the internal transfer N ṁ<sub>g</sub> cancels: M + N m<sub>w,grain</sub> + M<sub>steam</sub> = constant. This is the same cancellation at a shared face as slides 27 and 62.' },
+  { name: 'Two coupled control volumes: energy', src: 'slides', ref: 'Conservation slide 10; energy slides 52–55',
+    eq: `${dd('', '<i>t</i>')}[(<i>Mc</i><sub>w</sub> + <i>C</i><sub>v</sub>)<i>T</i>] = <i>P</i> − <i>UA</i>(<i>T</i> − <i>T</i><sub>∞</sub>) − <i>N</i>(<i>Q̇</i><sub>g</sub> + <i>ṁ</i><sub>g</sub><i>c</i><sub>w</sub><i>T</i>) − <i>ṁ</i><sub>ev</sub>(<i>c</i><sub>w</sub><i>T</i> + <i>h</i><sub>fg</sub>)`,
+    words: 'The stove’s heat is shared between warming the water, heating the rice, making steam and losses.',
+    sym: ['<i>Q̇</i><sub>g</sub> heat conducted into one grain (W)'],
+    deep: 'Water that moves into a grain takes its enthalpy c<sub>w</sub>T with it. The pot term and the grain term then cancel in the total, so the overall energy balance closes exactly, which the checks confirm.' },
+  { name: 'Competing sinks and the rate-limiting step', src: 'new', ref: 'New concept (process design)',
+    eq: `<i>ṁ</i><sub>ev</sub> = ${F('<i>P</i> − <i>UA</i>(<i>T</i><sub>b</sub> − <i>T</i><sub>∞</sub>) − <i>NQ̇</i><sub>g</sub>', '<i>h</i><sub>fg</sub>')}   vs   <i>N ṁ</i><sub>g</sub> ∝ <i>D</i>`,
+    words: 'Steam is set by surplus heat; uptake by the rice is set by diffusion. The cook controls one (flame, lid) but not the other.',
+    sym: ['<i>T</i><sub>b</sub> boiling point'],
+    deep: 'The absorption method succeeds when the free water lasts just until the grain core has gelatinized. Turning the flame down or keeping the lid on reduces the steam sink without slowing the grain sink, so more water ends up in the rice.' }
+],
+verdict: [
+  { name: 'Dimensional analysis of the cooking time', src: 'new', ref: 'New concept (Buckingham Π reasoning)',
+    eq: `<i>t</i><sub>cook</sub> = ${F('<i>R</i>²', '<i>D</i>(<i>T</i><sub>b</sub>)')} · Φ(Bi, Le, ${F('<i>X</i><sub>gel</sub>', '<i>X</i><sub>0</sub>')}, ${F('<i>k</i><sub>g</sub><i>R</i>²', '<i>D</i>')}, <i>G</i>*, shape)`,
+    words: 'The cooking time is a diffusion time multiplied by a factor that depends on many dimensionless groups, so no single formula fits every case.',
+    sym: ['Φ an unknown function', '<i>G</i>* chosen “cooked” criterion'],
+    deep: 'The physics fixes the scale R²/D, but Φ depends on how much water must enter, how fast starch converts compared with diffusion (k<sub>g</sub>R²/D), the shape and the definition of “done”. Changing any of them moves the time. That is the precise reason the brief warns against a universal cooking time.' },
+  { name: 'Temperature enters twice', src: 'new', ref: 'Arrhenius + boiling point',
+    eq: `<i>T</i><sub>b</sub> = <i>T</i><sub>b</sub>(<i>p</i>)   →   <i>D</i> ∝ e<sup>−<i>E</i><sub>a</sub>/<i>R</i><sub>g</sub><i>T</i><sub>b</sub></sup>,   <i>k</i><sub>g</sub> ∝ e<sup>−<i>E</i><sub>g</sub>/<i>R</i><sub>g</sub><i>T</i><sub>b</sub></sup>`,
+    words: 'Pressure sets the water temperature, and the temperature sets both transport and gelatinization rates.',
+    sym: ['<i>p</i> pressure above the water'],
+    deep: 'This is why a pressure cooker (about 120 °C) roughly halves the time and cooking at altitude (about 90 °C) lengthens it, even though heat conduction itself is never the slow step.' },
+  { name: 'Why R²/α is the wrong estimate', src: 'slides', ref: 'Conservation slide 56',
+    eq: `${F('<i>t</i><sub>heat</sub>', '<i>t</i><sub>water</sub>')} ~ ${F('<i>D</i>', 'α')} = ${F('1', 'Le')} ≈ ${F('1', '350')}`,
+    words: 'A thermal-diffusion estimate measures the wrong process, so it predicts seconds instead of minutes.',
+    sym: ['Le Lewis number'],
+    deep: 'Use the time scale of the slowest step. Even R²/D is only a scale, because the core needs only part of the final water to gelatinize and the grain swells while it cooks.' }
+]
+};
+function renderLaws(s) {
+  const list = LAWS[s.key] || [];
+  $('laws').innerHTML = `<div class="laws-head"><span class="eyebrow">The physics of this stage</span><h3>Laws, equations &amp; theorems</h3><p class="tagnote"><span class="lawtag slides">From the course notes</span> concepts taught in the slides · <span class="lawtag new">New concept</span> ideas beyond the notes, explained in depth</p></div>
+    <div class="lawgrid">${list.map((L, i) => `<article class="law ${L.src}"><div class="lawtop"><span class="lawnum">${i + 1}</span><h4>${L.name}</h4><span class="lawtag ${L.src}">${L.src === 'new' ? 'New concept' : 'Course notes'}</span></div>
+      <div class="big">${L.eq}</div>${L.eq2 ? `<div class="big small">${L.eq2}</div>` : ''}
+      <p class="words">${L.words}</p>
+      <ul class="syms">${L.sym.map(x => `<li>${x}</li>`).join('')}</ul>
+      <details><summary>Go deeper</summary><p>${L.deep}</p></details>
+      <div class="lref">${L.ref}</div></article>`).join('')}</div>`;
+}
+
+const STAGES = [];
+
+/* ---------------- Stage 1: the pot ---------------- */
+STAGES.push({
+  key: 'pot', icon: 'pot', short: 'Heat the pot', brief: ['a', 'b', 'd', 'f'],
+  title: 'Where does the stove’s energy go — and why does the water stop at its boiling point?',
+  intro: 'Before any rice is involved: heat a pot of water. Separate three ideas the brief asks for — temperature (K), stored energy (J) and heat-transfer rate (W) — and see why a stronger flame does not make boiling water hotter.',
+  sceneTitle: 'Pot of water on a stove', tags: [['calc', 'water T (colour), level, steam rate, energy flows'], ['illus', 'pot and burner drawing, flames, bubbles, wisp motion']],
+  controls: [
+    { k: 'water', label: 'Water in the pot', unit: 'kg', min: 0.3, max: 3, step: 0.05, v: 1.0 },
+    { k: 'P', label: 'Heat delivered to the pot', unit: 'W', min: 200, max: 3000, step: 50, v: 1500, hint: 'Power that actually enters the pot (a gas stove delivers ≈ 40–50 % of its fuel energy).' },
+    { k: 'lid', label: 'Lid on', type: 'toggle', v: true },
+    { k: 'place', label: 'Where are you cooking?', type: 'select', options: placeOptions, v: 'sea' },
+    { k: 'simmer', label: 'Turn down to a simmer after boiling', type: 'toggle', v: false },
+    { k: 'Psim', label: 'Simmer power', unit: 'W', min: 50, max: 1500, step: 25, v: 400, show: v => v.simmer },
+    { k: 'Tamb', label: 'Kitchen / starting temperature', unit: '°C', min: 10, max: 40, step: 1, v: 25 },
+    { k: 'tEnd', label: 'Duration', unit: 'min', min: 5, max: 60, step: 1, v: 20 }
+  ],
+  presets: [
+    ['Sea level, lid on', { place: 'sea', lid: true, P: 1500, water: 1, simmer: false }],
+    ['Open pot', { lid: false }],
+    ['Leh (3500 m)', { place: 'leh' }],
+    ['Pressure cooker', { place: 'cooker', lid: true }],
+    ['Boil, then simmer', { simmer: true, Psim: 300, lid: true }]
+  ],
+  speeds: [10, 30, 60, 120, 300],
+  compute(v) {
+    const pl = P.PLACES[v.place];
+    return P.runPot({ water: v.water, Pboil: v.P, Psim: v.Psim, simmerAfterBoil: v.simmer, lid: v.lid, altitude: pl.altitude, cookerGauge: pl.gauge, Tamb: v.Tamb, T0: v.Tamb, tEnd: v.tEnd * 60, nOut: 480, dt: 0.5 });
+  },
+  marks: r => [r.events.tBoil != null && ['boils', r.events.tBoil]],
+  showAt: r => r.events.tBoil ? r.events.tBoil + 150 : r.t[r.t.length - 1],
+  scene(r, t, ph, v) {
+    const i = idxAt(r.t, t), Tp = r.Tp[i], M = r.M[i], boiling = r.phase[i] === 'boiling', ev = r.evapRate[i] * 1000, Pnow = r.power[i] || v.P;
+    const cooker = P.PLACES[v.place].gauge > 0;
+    const px = 0.0006, area = Math.PI * 0.09 * 0.09, lev = clamp((M / P.waterRho(Tp)) / area / px, 0, 220);
+    let s = SCENE_DEFS + `<rect x="0" y="0" width="760" height="400" fill="var(--panel2)"/>`;
+    s += steam(305, 104, 170, (v.lid || cooker) ? ev * 0.35 : ev, ph);
+    s += burner(305, 352, 210) + flames(305, 352, 210, Pnow, ph);
+    // pot (cut-away): water level and colour are calculated
+    const x0 = 189, x1 = 421, yTop = 114, yBot = 340, yW = yBot - lev;
+    s += potBack(x0, x1, yTop, yBot);
+    const wc = PL.heatColor(Tp, 15, 125);
+    s += `<defs><linearGradient id="wgrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${wc}" stop-opacity=".62"/><stop offset="1" stop-color="${wc}" stop-opacity=".95"/></linearGradient></defs>`;
+    if (lev > 1) {
+      s += `<rect x="${x0}" y="${yW}" width="${x1 - x0}" height="${yBot - yW}" fill="url(#wgrad)"/>`;
+      if (boiling) s += bubbles(x0 + 10, x1 - 10, yW + 6, yBot - 4, clamp(ev / 30, 0.15, 1), ph);
+      const rip = boiling ? 1.8 * Math.sin(ph * 6) : 0;
+      s += `<ellipse cx="${(x0 + x1) / 2}" cy="${yW}" rx="${(x1 - x0) / 2}" ry="${5 + rip}" fill="${wc}" opacity=".55"/><ellipse cx="${(x0 + x1) / 2}" cy="${yW}" rx="${(x1 - x0) / 2}" ry="${5 + rip}" fill="none" stroke="#ffffff" stroke-opacity=".6" stroke-width="1.3"/>`;
+    }
+    s += potFront(x0, x1, yTop, yBot);
+    if (cooker) s += potLid(x0, x1, yTop - 4, 'cooker'); else if (v.lid) s += potLid(x0, x1, yTop - 4, 'glass');
+    s += T((305), yW - 10 < 125 ? 128 : yW - 10, `${(Math.max(0, M) * 1000).toFixed(0)} g water`, { anchor: 'middle', size: 12, halo: 3 });
+    s += thermometer(500, 110, 320, Tp, 20, 125, r.Tb);
+    s += T(500, 370, `${Tp.toFixed(1)} °C`, { anchor: 'middle', weight: 600, size: 15 });
+    // live energy flows (rates, W)
+    const loss = r.loss[i] || 0, latent = r.evapRate[i] * P.hfg(Tp), heatUp = Math.max(0, Pnow - loss - latent);
+    s += `<g transform="translate(560 120)">${PL.flowDiagram({ source: `Heat in: ${Pnow.toFixed(0)} W`, sinks: [
+      { label: `warming the water ${heatUp.toFixed(0)} W`, value: heatUp, color: '#d2524a' },
+      { label: `making steam ${latent.toFixed(0)} W`, value: latent, color: '#8fb3cf' },
+      { label: `lost from walls ${loss.toFixed(0)} W`, value: loss, color: '#b5a893' }], w: 190, h: 170, theme: theme(), sourceColor: '#f08a2c' })}</g>`;
+    s += T_(560, 312, 'Where the heat goes now (rates):', 11.5) + T_(560, 328, boiling ? 'At T_b the water cannot get hotter;' : 'Below T_b most heat raises temperature.', 11) + T_(560, 343, boiling ? 'extra heat only makes more steam.' : '', 11);
+    s += T(20, 30, `p = ${(r.pAbs / 1000).toFixed(1)} kPa  →  T_b = ${r.Tb.toFixed(1)} °C`, { size: 13, weight: 600 }) + T_(20, 48, boiling ? `steam ≈ ${(ev * 60).toFixed(1)} g/min (calculated)` : 'heating up', 12);
+    return s;
+  },
+  metrics(r, t, v) {
+    const i = idxAt(r.t, t);
+    return [
+      ['Water temperature T', fmt(r.Tp[i], 4), '°C', true], ['Boiling point T_b(p)', fmt(r.Tb, 4), '°C'],
+      ['Stored energy gained', fmt(r.sensible[i] / 1000, 4), 'kJ (sensible, vs start)'], ['Heat-transfer rate in', fmt(r.power[i] || v.P, 4), 'W = J/s'],
+      ['Loss rate (walls, lid)', fmt(r.loss[i], 3), 'W'], ['Steam rate', fmt(r.evapRate[i] * 60000, 3), 'g/min'],
+      ['Water boiled off', fmt(r.Mevap[i] * 1000, 4), 'g'], ['Time to boil', r.events.tBoil ? fmtT(r.events.tBoil) : 'not yet', '']];
+  },
+  explain() {
+    return `<h3>What this shows</h3>
+      <p><b>Three different quantities.</b> Temperature says <i>how hot</i> the water is. Stored energy says <i>how much</i> energy it holds. The heat-transfer rate says <i>how fast</i> energy arrives. A big pot and a small pot can share a temperature while storing very different energy.</p>
+      <p><b>Before boiling</b>, heat in minus heat lost goes into stored energy, so the temperature rises (accumulation = in − out).</p>
+      <p><b>At boiling</b>, the water’s vapour pressure equals the pressure above it. Extra energy now breaks liquid into vapour (latent heat) instead of raising the temperature. A bigger flame gives more steam, not hotter water. Lower pressure (hills) lowers the boiling point; a pressure cooker raises it.</p>
+      <p><b>Why it matters for rice:</b> the grains can never be hotter than the boiling point, and every bit of water that leaves as steam is water the rice can no longer absorb.</p>`;
+  },
+  predict: { q: 'How many minutes until this water boils?', unit: 'min', answer: r => r.events.tBoil ? r.events.tBoil / 60 : null, hint: 'Estimate t ≈ C·ΔT / (P − losses) before you run it.' },
+  plots(r, t, v, th) {
+    const tm = r.t.map(x => x / 60);
+    return [
+      { id: 'p1T', title: 'Water temperature', spec: { xLabel: 'time (min)', yLabel: 'T (°C)', legend: 'top', series: [{ name: 'pot water', x: tm, y: r.Tp, color: th.series[2] }], hlines: [{ y: r.Tb, label: `T_b = ${r.Tb.toFixed(1)} °C`, color: th.series[2] }], vlines: r.events.tBoil ? [{ x: r.events.tBoil / 60, label: 'boils' }] : [], cursorX: t / 60 } },
+      { id: 'p1E', title: 'Cumulative energy: where did the heater energy go?', stacked: true, spec: { xLabel: 'time (min)', yLabel: 'energy (kJ)', legend: 'top', x: tm,
+        series: [{ name: 'stored (sensible)', y: r.sensible.map(e => e / 1000), color: '#d2524a' }, { name: 'steam (latent + enthalpy)', y: r.cumLatent.map(e => e / 1000), color: '#8fb3cf' }, { name: 'wall losses', y: r.cumLoss.map(e => e / 1000), color: '#b5a893' }],
+        overlay: { name: '∫P dt (heater)', y: r.cumPin.map(e => e / 1000) }, cursorX: t / 60 } },
+      { id: 'p1M', title: 'Water in the pot and water boiled off', spec: { xLabel: 'time (min)', yLabel: 'mass (g)', legend: 'top', series: [{ name: 'liquid in pot', x: tm, y: r.M.map(m => m * 1000), color: th.series[1] }, { name: 'boiled off (steam)', x: tm, y: r.Mevap.map(m => m * 1000), color: th.series[5], dash: '5 3' }], cursorX: t / 60 } }];
+  },
+  checks(r) {
+    const eR = Math.max(...r.energyResidual.map(Math.abs)) / Math.max(1, r.ledger.Pin), wR = Math.max(...r.waterResidual.map(Math.abs));
+    const Tmax = Math.max(...r.Tp), cc = P.boilingPointCC(r.pAbs);
+    return [
+      [eR < 1e-9, 'Energy balance closes: ∫P dt = Δ(stored) + losses + latent + steam enthalpy', eR, 'relative residual'],
+      [wR < 1e-12, 'Water conserved: liquid + steam = initial water', wR, 'kg'],
+      [Tmax <= r.Tb + 1e-9, 'Water never exceeds T_b while liquid remains', Tmax, '°C max'],
+      [Math.abs(cc - r.Tb) < 1, 'Boiling point: Antoine vs Clausius–Clapeyron (independent)', Math.abs(cc - r.Tb), 'K difference'],
+      [null, 'Pot treated as one well-mixed temperature: buoyant convection stirs the water; the grain stages need spatial models', null, '']];
+  },
+  equations: `
+    <div class="eqbox"><h4>Control volume</h4><p>CV A = the liquid water in the pot plus the vessel wall (one temperature, well mixed). Steam leaves through the free surface; heat enters through the base and leaves through walls and lid.</p>
+      <div class="eq">accumulation = in − out  <span class="src">(slide 10, no generation)</span></div>
+      <div class="eq">d/dt [ (M c<sub>w</sub> + C<sub>v</sub>) T ] = P − UA (T − T<sub>amb</sub>) − ṁ<sub>ev</sub> (c<sub>w</sub>T + h<sub>fg</sub>)</div>
+      <div class="eq">dM/dt = − ṁ<sub>ev</sub></div>
+      <p>Energy leaves with the steam as enthalpy c<sub>w</sub>T + h<sub>fg</sub> (flow work is included in enthalpy — Welty Ch. 6 / Momentum–Energy slides 52–55).</p></div>
+    <div class="eqbox"><h4>The boiling cap</h4><div class="eq">T ≤ T<sub>b</sub>(p),  p = p<sub>atm</sub>(z) + p<sub>gauge</sub></div>
+      <p>At T = T<sub>b</sub> the energy surplus sets the boil-off: ṁ<sub>boil</sub> = [P − UA(T − T<sub>amb</sub>)] / h<sub>fg</sub>. T<sub>b</sub>(p) from the Antoine equation; p<sub>atm</sub>(z) from the standard atmosphere. Below T<sub>b</sub>, slow evaporation ṁ = k<sub>m</sub>A(ρ<sub>v,sat</sub>(T) − ρ<sub>v,room</sub>) (mass-transfer analogy; k<sub>m</sub> illustrative).</p></div>
+    <div class="eqbox"><h4>Assumptions and what is left out</h4><ul>
+      <li>Lumped temperature: the water is stirred by natural convection and boiling (a spatial model is needed for the grains, not for the pot).</li>
+      <li>P is the power that reaches the pot; stove efficiency is not modelled.</li><li>UA and k<sub>m</sub> are illustrative constants (lid on: UA = 3.5 W/K; off: 6 W/K).</li>
+      <li>Pressure cooker: sealed until the valve lifts at 1 bar gauge; steam then vents at the surplus rate.</li><li>Constant c<sub>w</sub>; h<sub>fg</sub>(T) from the Watson correlation.</li></ul></div>`,
+  defs: [['T', 'Temperature of the pot water — how hot it is', 'K or °C'], ['E = (M c_w + C_v) T', 'Stored (sensible) energy of water + vessel, relative to 0 °C', 'J'], ['P', 'Heat-transfer rate from the stove into the pot', 'W = J/s'], ['UA', 'Overall loss conductance of walls and lid', 'W/K'], ['T_b(p)', 'Boiling point at absolute pressure p', '°C'], ['h_fg', 'Latent heat of vaporization', 'J/kg'], ['ṁ_ev', 'Evaporation (steam) mass flow rate', 'kg/s'], ['c_w, C_v', 'Specific heat of water; heat capacity of the vessel', 'J/(kg·K); J/K']],
+  questions: ['Double the power. Does the boiling temperature change? What does change?', 'Compare lid on and off at the same power: which energy term changes most?', 'Cook at Leh and in a pressure cooker. Which temperature will the rice grains experience in each?'],
+  record: (r, v) => [`${v.water} kg, ${v.P} W, lid ${v.lid ? 'on' : 'off'}, ${P.PLACES[v.place].name}${v.simmer ? `, simmer ${v.Psim} W` : ''}`, `T_b ${r.Tb.toFixed(1)} °C; boils at ${fmtT(r.events.tBoil)}; boiled off ${(r.final.Mevap * 1000).toFixed(0)} g in ${v.tEnd} min`]
+});
+
+/* ---------------- Stage 2: conduction into one grain ---------------- */
+STAGES.push({
+  key: 'conduct', icon: 'grain', short: 'Into the grain', brief: ['a', 'd', 'f'],
+  title: 'Drop a grain into boiling water: how long does its centre lag behind?',
+  intro: 'Heat crosses the water–grain surface (convection, coefficient h) and then moves through the solid by conduction. The Biot number compares the two resistances. Water uptake is switched off here so that conduction is seen on its own.',
+  sceneTitle: 'Cross-section of one grain in hot water', tags: [['calc', 'temperature field, surface heat flux'], ['illus', 'grain outline and shine (1D solution drawn on it)']],
+  controls: [
+    { k: 'grain', label: 'Grain', type: 'select', options: grainOptions, v: 'medium' },
+    { k: 'Rc', label: 'Custom equivalent radius', unit: 'mm', min: 0.4, max: 2.5, step: 0.05, v: 1.0, show: v => v.grain === 'custom' },
+    { k: 'geom', label: 'Geometry for the 1D model', type: 'select', options: geomOptions, v: 'sphere' },
+    { k: 'hMode', label: 'Heat-transfer coefficient h', type: 'seg', options: [['manual', 'Set h'], ['natural', 'Estimate (natural convection)']], v: 'manual' },
+    { k: 'h', label: 'h', unit: 'W/m²K', min: 50, max: 10000, step: 50, v: 1500, show: v => v.hMode === 'manual' },
+    { k: 'Tb', label: 'Water temperature', unit: '°C', min: 50, max: 125, step: 1, v: 100 },
+    { k: 'T0', label: 'Grain starting temperature', unit: '°C', min: 5, max: 45, step: 1, v: 25 },
+    { k: 'lumped', label: 'Show the uniform-temperature (lumped) model', type: 'toggle', v: true },
+    { k: 'tEnd', label: 'Duration', unit: 's', min: 5, max: 120, step: 1, v: 30 }
+  ],
+  presets: [['Boiling water', { Tb: 100, hMode: 'manual', h: 1500 }], ['Still water (Nu = 2 limit)', { hMode: 'manual', h: 600 }], ['Poorly stirred (h = 150)', { hMode: 'manual', h: 150 }], ['Big grain 2 mm', { grain: 'custom', Rc: 2 }], ['Pressure cooker 120 °C', { Tb: 120 }]],
+  speeds: [0.25, 0.5, 1, 2, 5],
+  compute(v) {
+    const R = presetR(v.grain, v.geom, v.Rc);
+    const hn = P.hSphereNatural(R, v.T0, v.Tb), h = v.hMode === 'natural' ? hn.h : v.h;
+    const run = P.runGrain({ grain: { geom: v.geom, R0: R, N: 60, level: 4, T0: v.T0, water: false }, bath: { TC: v.Tb, h }, tEnd: v.tEnd, nOut: 400, dtMax: v.tEnd / 800, dtMin: 1e-4 });
+    const k = P.cellK(PD.X0, PD), alpha = P.grainAlpha(PD.X0, PD), Bi = h * R / k;
+    const m = P.GEOM[v.geom], lumpRate = (m + 1) * Bi * alpha / (R * R);          // hA/(ρcV) = (m+1) h/(ρ c R)
+    const qs = run.t.map((tt, i) => i ? (run.energyIn[i] - run.energyIn[i - 1]) / (run.t[i] - run.t[i - 1]) / P.areaAt(R, m) : null);
+    return Object.assign(run, { R, h, hn, k, alpha, Bi, lumped: run.t.map(tt => v.Tb - (v.Tb - v.T0) * Math.exp(-lumpRate * tt)), qs, v });
+  },
+  marks: r => [r.events.tCentreWithin1K != null && ['centre within 1 K', r.events.tCentreWithin1K]],
+  showAt: r => 2.5,
+  scene(r, t, ph, v) {
+    const i = idxAt(r.t, t), pr = r.profiles[i], Tc = r.Tc[i];
+    let s = SCENE_DEFS + `<rect width="760" height="400" fill="${PL.heatColor(v.Tb, 15, 125)}" opacity=".22"/>`;
+    for (let k = 0; k < 14; k++) { const x = (k * 61 + ph * 30) % 760, y = 40 + (k * 97) % 330; s += `<path d="M${x},${y}q14,-8 28,0t28,0" fill="none" stroke="${PL.heatColor(v.Tb, 15, 125)}" stroke-opacity=".35" stroke-width="2"/>`; }
+    const rings = PL.profileRings(pr, (q, j) => PL.heatColor(q.T[j], 15, 125), null, 40);
+    s += PL.grainSection({ cx: 280, cy: 200, a: 215, b: 130, rings, uid: 'c2', gloss: 0.2, theme: theme(), stroke: 'var(--ink)' });
+    const q = r.qs[i] || 0, L = clamp(q / 4e4, 0, 1) * 46;
+    for (let k = 0; k < 12; k++) { const a = k / 12 * 2 * Math.PI, x = 280 + 215 * Math.cos(a), y = 200 + 130 * Math.sin(a), nx = Math.cos(a) * 130, ny = Math.sin(a) * 215, nn = Math.hypot(nx, ny); if (L > 3) s += arrow(x + nx / nn * (L + 8), y + ny / nn * (L + 8), x + nx / nn * 6, y + ny / nn * 6, 'var(--heat)', 2.5); }
+    s += `<circle cx="280" cy="200" r="5" fill="var(--ink)"/>` + T(290, 196, `centre ${Tc.toFixed(1)} °C`, { weight: 600, halo: 3, size: 13 });
+    s += T(280, 52, `surface heat flux q = ${(q / 1000).toFixed(1)} kW/m²`, { anchor: 'middle', halo: 3, fill: 'var(--heat)', weight: 600 });
+    s += T(18, 30, `water at ${v.Tb} °C · h = ${r.h.toFixed(0)} W/m²K · Bi = hR/k = ${r.Bi.toFixed(2)}`, { weight: 600, size: 13, halo: 3 });
+    if (v.lumped) { const TL = interp(r.t, r.lumped, t); s += `<ellipse cx="640" cy="120" rx="70" ry="42" fill="${PL.heatColor(TL, 15, 125)}" stroke="var(--ink)" stroke-width="1.5"/>` + T(640, 184, 'lumped model:', { anchor: 'middle', size: 12, halo: 3 }) + T(640, 200, `one T = ${TL.toFixed(1)} °C`, { anchor: 'middle', size: 12, weight: 600, halo: 3 }) + T(640, 216, r.Bi > 0.1 ? 'Bi > 0.1 → not valid' : 'Bi < 0.1 → valid', { anchor: 'middle', size: 11.5, fill: r.Bi > 0.1 ? 'var(--bad)' : 'var(--good)', halo: 3 }); }
+    s += cbar(560, 300, 180, 'heat', '15 °C', '125 °C', 'temperature colour', 'cb2');
+    s += T_(560, 355, `R = ${(r.R * 1e3).toFixed(2)} mm (${v.geom}), α = ${fmt(r.alpha, 3)} m²/s`, 11) + T_(560, 370, '1D radial solution drawn on a grain outline', 11);
+    return s;
+  },
+  metrics(r, t, v) { const i = idxAt(r.t, t); return [['Centre temperature', fmt(r.Tc[i], 4), '°C', true], ['Surface temperature', fmt(r.Ts[i], 4), '°C'], ['Biot number Bi = hR/k', fmt(r.Bi, 3), '–'], ['Fourier number Fo = αt/R²', fmt(r.alpha * t / (r.R * r.R), 3), '–'], ['Heat absorbed (one grain)', fmt(r.energyIn[i] * 1000, 3), 'mJ'], ['Surface heat flux', fmt((r.qs[i] || 0) / 1000, 3), 'kW/m²'], ['Centre within 1 K at', fmtT(r.events.tCentreWithin1K), ''], ['Time scale R²/α', fmtT(r.R * r.R / r.alpha), '']]; },
+  explain() {
+    return `<h3>What this shows</h3>
+      <p><b>Two resistances in series.</b> Heat must first cross the thin water layer at the grain surface (convection) and then travel through the solid grain (conduction). The Biot number compares the two.</p>
+      <p><b>When the inside resistance matters</b> (Bi above about 0.1), the surface warms first and the centre lags behind. The temperature inside is a profile, not one number, so a “uniform temperature” (lumped) model fails. For a rice grain in water this is the case.</p>
+      <p><b>But the lag is short.</b> Conduction time grows with size squared, and a grain is only about a millimetre thick, so the whole grain reaches the water temperature within seconds. Even in still water a tiny particle is well coupled to its surroundings.</p>
+      <p class="good">Heating the grain takes seconds; cooking takes minutes. Heat transfer cannot be what sets the cooking time.</p>`;
+  },
+  predict: { q: 'How many seconds until the grain centre is within 1 K of the water?', unit: 's', answer: r => r.events.tCentreWithin1K, hint: 'Use t ~ R²/α with R ≈ 1 mm, α ≈ 10⁻⁷ m²/s.' },
+  plots(r, t, v, th) {
+    const snaps = [0.02, 0.06, 0.15, 0.3, 0.6].map(f => f * v.tEnd), series = snaps.map((tt, j) => { const pr = r.profiles[idxAt(r.t, tt)]; return { name: `t = ${fmt(tt, 2)} s`, x: pr.r.map(x => x / pr.R), y: pr.T, color: PL.heatColor(v.T0 + (v.Tb - v.T0) * (0.2 + 0.8 * j / 4), 15, 125), width: 1.8 }; });
+    const cur = r.profiles[idxAt(r.t, t)]; series.push({ name: `now (${fmt(t, 3)} s)`, x: cur.r.map(x => x / cur.R), y: cur.T, color: th.ink, width: 2.6 });
+    if (v.geom === 'sphere' && t > 0) { const xs = [0, 0.25, 0.5, 0.75, 0.95]; series.push({ name: 'series solution (check)', x: xs, y: xs.map(x => v.Tb - (v.Tb - v.T0) * P.sphereConvective(r.Bi, x, r.alpha * t / (r.R * r.R))), points: true, hollow: true, color: th.ink }); }
+    return [
+      { id: 'p2r', title: 'Temperature profile inside the grain', spec: { xLabel: 'r / R', yLabel: 'T (°C)', xMin: 0, xMax: 1, legend: 'right', series } },
+      { id: 'p2t', title: 'Centre, surface and lumped model vs time', spec: { xLabel: 'time (s)', yLabel: 'T (°C)', legend: 'top', series: [{ name: 'centre', x: r.t, y: r.Tc, color: th.series[2] }, { name: 'surface', x: r.t, y: r.Ts, color: th.series[0] }].concat(v.lumped ? [{ name: 'lumped (one T)', x: r.t, y: r.lumped, color: th.series[5], dash: '6 4' }] : []), vlines: [{ x: r.R * r.R / r.alpha, label: 'R²/α' }], cursorX: t } }];
+  },
+  checks(r, v) {
+    const eR = Math.abs(r.final.energyResidual) / Math.abs(r.final.energyIn); const out = [[eR < 1e-9, 'Energy balance of the grain: stored = ∫ surface heat flow dt', eR, 'relative residual']];
+    if (v.geom === 'sphere') { let mx = 0; for (let i = 5; i < r.t.length; i += 20) { const pr = r.profiles[i]; for (let j = 0; j < pr.r.length; j += 10) mx = Math.max(mx, Math.abs((pr.T[j] - v.Tb) / (v.T0 - v.Tb) - P.sphereConvective(r.Bi, pr.r[j] / r.R, r.alpha * r.t[i] / (r.R * r.R)))); } out.push([mx < 0.01, 'Finite-volume field vs Carslaw–Jaeger series (convective sphere)', mx, 'max |Δθ|']); }
+    else out.push([null, 'Analytical comparison is built in for the sphere; choose “Equivalent sphere” to see it', null, '']);
+    out.push([null, `Lumped model valid only for Bi < 0.1 — here Bi = ${r.Bi.toFixed(2)}`, r.Bi, 'Bi']);
+    out.push([r.events.tCentreWithin1K < 60, 'Centre within 1 K in under a minute (heat is not the slow step)', r.events.tCentreWithin1K, 's']);
+    return out;
+  },
+  equations: `
+    <div class="eqbox"><h4>Control volume and balance</h4><p>CV = one grain (fixed size here). No heat generation; energy enters only through its surface.</p>
+      <div class="eq">ρc ∂T/∂t = −∇·<b>q</b>,  <b>q</b> = −k∇T  <span class="src">(slides 48–50)</span></div>
+      <div class="eq">ρc ∂T/∂t = (1/r<sup>m</sup>) ∂/∂r ( k r<sup>m</sup> ∂T/∂r ),  m = 0 slab, 1 cylinder, 2 sphere</div></div>
+    <div class="eqbox"><h4>Initial and boundary conditions</h4>
+      <div class="eq">T(r, 0) = T<sub>0</sub>;   ∂T/∂r = 0 at r = 0 (symmetry)</div>
+      <div class="eq">−k ∂T/∂r |<sub>R</sub> = h [ T(R) − T<sub>water</sub> ]</div>
+      <p>Bi = hR/k compares the internal conduction resistance R/k with the surface resistance 1/h. Fo = αt/R² is dimensionless time, α = k/(ρc).</p></div>
+    <div class="eqbox"><h4>Lumped limit and checks</h4><div class="eq">dT/dt = (hA/ρcV)(T<sub>water</sub> − T)  ⇒  θ = exp[−(m+1) Bi Fo]</div>
+      <p>Valid when Bi &lt; 0.1. The spatial solution is checked against the exact series θ = Σ C<sub>n</sub> e<sup>−λ<sub>n</sub>²Fo</sup> sin(λ<sub>n</sub>r*)/(λ<sub>n</sub>r*), with 1 − λ cot λ = Bi.</p>
+      <ul><li>Properties from composition (Choi &amp; Okos): k ≈ ${'0.29'} W/m·K, ρ ≈ 1400 kg/m³, c ≈ 1830 J/kg·K at X₀ = 0.14.</li><li>Natural convection: Nu = 2 + 0.589 Ra<sup>¼</sup>/[1 + (0.469/Pr)<sup>9/16</sup>]<sup>4/9</sup> (Churchill 1983).</li><li>Water uptake is off here; Stage 4 shows both together.</li></ul></div>`,
+  defs: [['T(r,t)', 'Temperature field inside the grain', '°C'], ['q', 'Conductive heat flux (rate per area)', 'W/m²'], ['k', 'Thermal conductivity of the grain', 'W/(m·K)'], ['α = k/ρc', 'Thermal diffusivity', 'm²/s'], ['h', 'Water-to-grain heat-transfer coefficient', 'W/(m²·K)'], ['Bi = hR/k', 'Biot number: internal ÷ surface resistance', '–'], ['Fo = αt/R²', 'Fourier number: dimensionless time', '–'], ['R', 'Equivalent radius with the grain’s volume-to-surface ratio', 'm']],
+  questions: ['Set h = 150 W/m²K and then 5000. When does the lumped model become acceptable?', 'Double the grain radius. By what factor does the heating time grow?', 'Why can a 1 mm grain never have h below about 600 W/m²K in water?'],
+  record: (r, v) => [`R ${(r.R * 1e3).toFixed(2)} mm ${v.geom}, h ${r.h.toFixed(0)}, water ${v.Tb} °C, start ${v.T0} °C`, `Bi ${r.Bi.toFixed(2)}; centre within 1 K at ${fmtT(r.events.tCentreWithin1K)}; R²/α ${fmtT(r.R * r.R / r.alpha)}`]
+});
+
+/* ---------------- Stage 3: soaking ---------------- */
+STAGES.push({
+  key: 'soak', icon: 'drop', short: 'Soak', brief: ['a', 'b', 'c', 'd'],
+  title: 'Soaking: how fast does water get into a grain at room temperature?',
+  intro: 'Below the gelatinization temperature the starch stays native. Water diffuses in from the surface until the grain reaches its soaking capacity X_nat ≈ 0.40 kg/kg. The surrounding water (the soaking bath) and the grain are two different control volumes: what one gains, the other loses.',
+  sceneTitle: 'Soaking bath and one grain', tags: [['calc', 'moisture field, swelling, bath level'], ['illus', 'grain shape, glass, grain positions']],
+  controls: [
+    { k: 'grain', label: 'Grain', type: 'select', options: grainOptions, v: 'medium' },
+    { k: 'Rc', label: 'Custom equivalent radius', unit: 'mm', min: 0.4, max: 2.5, step: 0.05, v: 1.0, show: v => v.grain === 'custom' },
+    { k: 'geom', label: 'Geometry for the 1D model', type: 'select', options: geomOptions, v: 'sphere' },
+    { k: 'Ts', label: 'Soaking water temperature', unit: '°C', min: 5, max: 60, step: 1, v: 25 },
+    { k: 'ratio', label: 'Bath water per rice (mass ratio)', unit: '–', min: 1, max: 6, step: 0.1, v: 3 },
+    { k: 'compare', label: 'Compare all three grain sizes', type: 'toggle', v: true },
+    { k: 'view', label: 'Plot uptake against', type: 'seg', options: [['t', 'time'], ['sqrt', '√time'], ['fo', 'Fo = Dt/R²']], v: 't' },
+    { k: 'tEnd', label: 'Duration', unit: 'h', min: 0.5, max: 8, step: 0.25, v: 3 }
+  ],
+  presets: [['Room temperature', { Ts: 25 }], ['Cold water 10 °C', { Ts: 10 }], ['Warm soak 50 °C', { Ts: 50 }], ['Short bold grain', { grain: 'short' }], ['Long slender grain', { grain: 'long' }]],
+  speeds: [60, 300, 900, 1800, 3600],
+  compute(v) {
+    const R = presetR(v.grain, v.geom, v.Rc);
+    const run = P.runGrain({ grain: { geom: v.geom, R0: R, N: 60, level: 4, T0: v.Ts }, bath: { TC: v.Ts }, tEnd: v.tEnd * 3600, nOut: 360, dtMax: 5 });
+    const D = P.diffusivity(v.Ts, PD, P.LEVELS[4], 0);
+    const sizes = v.compare ? ['long', 'medium', 'short'].map(k => { const Rk = P.equivalentSize(P.GRAIN_PRESETS[k], v.geom); return { k, R: Rk, run: P.runGrain({ grain: { geom: v.geom, R0: Rk, N: 50, level: 4, T0: v.Ts }, bath: { TC: v.Ts }, tEnd: v.tEnd * 3600, nOut: 240, dtMax: 5, keepProfiles: false }) }; }) : [];
+    const crank = run.t.map(tt => PD.X0 + (PD.Xnat - PD.X0) * P.uptakeFraction(v.geom, D * tt / (R * R)));
+    const t90 = P.crossTime(run.t, run.Xmean, PD.X0 + 0.9 * (PD.Xnat - PD.X0));
+    return Object.assign(run, { R0: R, D, sizes, crank, t90, v });
+  },
+  marks: r => [r.t90 != null && ['90 % soaked', r.t90]],
+  showAt: r => 1800,
+  scene(r, t, ph, v) {
+    const i = idxAt(r.t, t), pr = r.profiles[i], Xm = r.Xmean[i], RR = r.R[i] / r.R0;
+    let s = SCENE_DEFS + `<rect width="760" height="400" fill="var(--panel2)"/>`;
+    // beaker: rice 100 g basis; bath = ratio × 100 g (level calculated)
+    const dry = 100 / (1 + PD.X0), uptake = dry * (Xm - PD.X0), bath = v.ratio * 100 - uptake;
+    const Vr = dry * P.specVol(Xm, PD) * 1000, Vb = bath, H = (Vr / 0.62 + Vb) / 3.2;
+    const bx = 40, bw = 230, by = 360, lev = clamp((Vb + Vr) * 0.55, 20, 255), bed = clamp(Vr / 0.62 * 0.55, 5, 200);
+    s += `<ellipse cx="${bx + bw / 2}" cy="${by + 8}" rx="${bw / 2 + 14}" ry="8" fill="#000" opacity=".1"/>`;
+    s += `<defs><linearGradient id="bathG" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#8ec3e0" stop-opacity=".35"/><stop offset="1" stop-color="#3f86b8" stop-opacity=".45"/></linearGradient></defs>`;
+    s += `<rect x="${bx}" y="${by - lev}" width="${bw}" height="${lev}" fill="url(#bathG)"/>`;
+    for (let k = 0; k < 70; k++) { const g = LAYOUT[k], x = bx + 12 + g.u * (bw - 24), y = by - 6 - g.v * (bed - 8); s += riceGrain(x, y, 7.5 * RR, 2.8 * RR, g.a, 0, Xm, false); }
+    s += `<ellipse cx="${bx + bw / 2}" cy="${by - lev}" rx="${bw / 2}" ry="6" fill="#8ec3e0" opacity=".35" stroke="#ffffff" stroke-opacity=".6"/>`;
+    s += `<rect x="${bx - 6}" y="${by - 272}" width="${bw + 12}" height="276" rx="6" fill="url(#glassG)" stroke="#a9b8c0" stroke-width="2.5"/>`;
+    s += `<ellipse cx="${bx + bw / 2}" cy="${by - 272}" rx="${bw / 2 + 6}" ry="7" fill="none" stroke="#a9b8c0" stroke-width="2"/><line x1="${bx + 10}" y1="${by - 255}" x2="${bx + 10}" y2="${by - 20}" stroke="#ffffff" stroke-opacity=".55" stroke-width="4" stroke-linecap="round"/>`;
+    s += T(bx + bw / 2, by - lev - 8, `bath water ${bath.toFixed(1)} g (per 100 g rice)`, { anchor: 'middle', halo: 3, size: 12 });
+    s += T_(bx, 385, 'CV 1: soaking water · CV 2: grains (moving boundary)', 11);
+    // big cross-section
+    const rings = PL.profileRings(pr, (q, j) => PL.moistColor(q.X[j]), null, 40);
+    const a = 165 * RR / 1.12, b = 104 * RR / 1.12;
+    s += PL.grainSection({ cx: 520, cy: 190, a, b, rings, outline0: 1 / RR, uid: 's3', gloss: 0.25, theme: theme(), stroke: 'var(--ink)' });
+    for (let k = 0; k < 10; k++) { const ang = k / 10 * 2 * Math.PI + 0.3, x = 520 + a * Math.cos(ang), y = 190 + b * Math.sin(ang); const L = 26 * clamp((PD.Xnat - pr.X[pr.X.length - 1] + 0.12) / 0.3, 0.2, 1) * clamp(1 - (Xm - PD.X0) / (PD.Xnat - PD.X0) + 0.15, 0.1, 1); s += arrow(x + Math.cos(ang) * (L + 8), y + Math.sin(ang) * (L + 8), x + Math.cos(ang) * 5, y + Math.sin(ang) * 5, 'var(--water)', 2.2); }
+    s += T(520, 26, `⟨X⟩ = ${Xm.toFixed(3)} kg/kg (${wb(Xm).toFixed(1)} % wb) · R/R₀ = ${RR.toFixed(3)}`, { anchor: 'middle', weight: 600, size: 13, halo: 3 });
+    s += T_(520, 330, 'dashed: size before soaking', 11, 'middle');
+    s += cbar(410, 352, 220, 'moisture', 'dry 10 % wb', '75 % wb', '', 'cb3');
+    return s;
+  },
+  metrics(r, t, v) { const i = idxAt(r.t, t), X = r.Xmean[i]; return [['Mean moisture ⟨X⟩', fmt(X, 3), 'kg water/kg dry', true], ['Wet basis', fmt(wb(X), 3), '% water'], ['Mass gain of the rice', fmt(100 * ((1 + X) / (1 + PD.X0) - 1), 3), '%'], ['Swelling R/R₀', fmt(r.R[i] / r.R0, 4), '–'], ['Centre moisture', fmt(r.Xc[i], 3), 'kg/kg'], ['Water taken from bath', fmt(100 / (1 + PD.X0) * (X - PD.X0), 3), 'g per 100 g rice'], ['D at this temperature', fmt(r.D, 3), 'm²/s'], ['90 % of soaking gain at', fmtT(r.t90), '']]; },
+  explain() {
+    return `<h3>What this shows</h3>
+      <p><b>Diffusion from the outside in.</b> The surface touching water saturates almost at once. Water then moves inward because the wet outside and the dry inside differ in moisture (Fick’s law), so a moving “wet front” forms.</p>
+      <p><b>Fast at first, then slower.</b> Early on only a thin outer layer has filled, and its thickness grows like √time. Later the inside is already wet, the moisture difference driving the flow shrinks, and uptake levels off at the grain’s soaking capacity.</p>
+      <p><b>Size and temperature.</b> Diffusion time grows with size squared, so bigger grains soak much more slowly. Warmer water lets water molecules hop through the starch more easily (Arrhenius), so it soaks faster.</p>
+      <p><b>Two control volumes.</b> The bath and the grain are separate regions: every gram the grains gain is a gram the bath loses. The grain also swells slightly, so its boundary moves.</p>
+      <p><b>The limit of soaking.</b> Below the gelatinization temperature, starch can hold only a modest amount of water. Most of the water in cooked rice can only enter during cooking (Stage 5).</p>`;
+  },
+  predict: { q: 'After 30 minutes of soaking, by what percentage has the rice’s mass increased?', unit: '%', answer: r => r.t[r.t.length - 1] >= 1800 ? 100 * ((1 + interp(r.t, r.Xmean, 1800)) / (1 + PD.X0) - 1) : null, hint: 'The maximum (soaked to X_nat) is about +23 %.' },
+  plots(r, t, v, th) {
+    const snapsMin = [5, 15, 30, 60, 120, 240].filter(m => m * 60 <= r.t[r.t.length - 1]);
+    const prof = snapsMin.map((m, j) => { const p = r.profiles[idxAt(r.t, m * 60)]; return { name: `${m} min`, x: p.r.map(x => x * 1e3), y: p.X, color: PL.lerpColor(['#d9a441', '#5aa5bd', '#1d4677'], j / Math.max(1, snapsMin.length - 1)), width: 1.8 }; });
+    const cur = r.profiles[idxAt(r.t, t)]; prof.push({ name: 'now', x: cur.r.map(x => x * 1e3), y: cur.X, color: th.ink, width: 2.6 });
+    const xf = (tt, R) => v.view === 'sqrt' ? Math.sqrt(tt / 60) : v.view === 'fo' ? r.D * tt / (R * R) : tt / 60;
+    const xl = v.view === 'sqrt' ? '√(time / min)' : v.view === 'fo' ? 'Fo = D t / R₀²' : 'time (min)';
+    const ser = r.sizes.length ? r.sizes.map((s, j) => ({ name: P.GRAIN_PRESETS[s.k].name, x: s.run.t.map(tt => xf(tt, s.R)), y: s.run.Xmean, color: th.series[j] })) : [{ name: 'this grain', x: r.t.map(tt => xf(tt, r.R0)), y: r.Xmean, color: th.series[1] }];
+    ser.push({ name: 'rigid grain, constant D (Crank series)', x: r.t.map(tt => xf(tt, r.R0)), y: r.crank, color: th.muted, dash: '5 4', width: 1.5 });
+    const k = book.kitchen.soak, obs = (k.rows || []).filter(rw => isFinite(rw.t) && isFinite(rw.m) && rw.m > 0);
+    if (obs.length) ser.push({ name: 'your measurements (observed)', x: obs.map(o => xf(o.t * 60, r.R0)), y: obs.map(o => P.moistureFromMass(o.m, k.m0, k.X0)), points: 'square', color: cssVar('obs') || '#3f7d34' });
+    return [
+      { id: 'p3r', title: 'Moisture profiles inside the grain', spec: { xLabel: 'r (mm) — the curves end at the moving surface', yLabel: 'X (kg/kg dry basis)', legend: 'right', series: prof } },
+      { id: 'p3x', title: 'Mean moisture: grain size and scaling', spec: { xLabel: xl, yLabel: '⟨X⟩ (kg/kg dry basis)', legend: 'top', series: ser, hlines: [{ y: PD.Xnat, label: 'X_nat' }], cursorX: xf(t, r.R0) }, kitchen: true }];
+  },
+  checks(r, v) {
+    const f = r.final, wr = Math.abs(f.waterResidual) / f.waterIn, vr = Math.abs(f.Vgeom - f.Vshell) / f.Vshell;
+    const crankDiff = Math.max(...r.Xmean.map((x, i) => Math.abs(x - r.crank[i]))) / (PD.Xnat - PD.X0);
+    return [[wr < 1e-9, 'Water balance: grain gain = ∫ surface inflow dt = bath loss', wr, 'relative residual'], [vr < 1e-12, 'Volume additivity: grain volume = Σ m_s(1/ρ_s + X/ρ_w)', vr, 'relative'],
+      [null, 'Difference from the rigid, constant-D Crank series (effect of swelling and of D through the shell geometry)', crankDiff, 'max, fraction of the soaking gain'],
+      [null, 'Exact solver accuracy against Crank series is shown in Code/checks.html (A3–A6, max error < 0.002)', null, '']];
+  },
+  equations: `
+    <div class="eqbox"><h4>Species (water) balance for the grain</h4><p>Moisture content on a dry basis X = kg water / kg dry solid. Shells of the grain each hold a fixed dry mass; water moves relative to the solid.</p>
+      <div class="eq">∂(ρ<sub>d</sub>X)/∂t + ∇·<b>j</b> = 0,   <b>j</b> = −ρ<sub>d</sub> D ∇X</div>
+      <p>From the slides’ Fick’s law j<sub>A</sub> = −ρD∇w<sub>A</sub> (slides 40–44) with w = X/(1+X) and ρ = ρ<sub>d</sub>(1+X): the flux relative to the <i>solid</i> is j<sub>A</sub>/(1−w) = −ρ<sub>d</sub>D∇X. The reference velocity matters (slide 47).</p></div>
+    <div class="eqbox"><h4>Conditions</h4><div class="eq">X(r,0) = X₀ = 0.14;   X(R,t) = X<sub>nat</sub> = 0.40;   ∂X/∂r|<sub>0</sub> = 0</div>
+      <div class="eq">D(T) = D<sub>nat</sub> exp[−E<sub>a</sub>/R<sub>g</sub> (1/T − 1/T<sub>ref</sub>)]</div>
+      <p>D<sub>nat</sub> = 3.6×10⁻¹⁰ m²/s at 95 °C (Briffaz et al. 2014), E<sub>a</sub> = 32.5 kJ/mol (Bello et al.). Check: D(45 °C) = 6.8×10⁻¹¹, vs ≈ 8.8×10⁻¹¹ m²/s reported for white-rice soaking at 25–65 °C.</p></div>
+    <div class="eqbox"><h4>Moving boundary (swelling)</h4><div class="eq">V<sub>shell</sub> = m<sub>s</sub> (1/ρ<sub>s</sub> + X/ρ<sub>w</sub>)</div>
+      <p>The grain is a CV whose boundary moves with the solid. With boundary velocity <b>w</b> the slide 18 identity d/dt∫<sub>V(t)</sub>C dV = ∫∂C/∂t dV + ∮C <b>w</b>·<b>n</b> dA applies; following the solid, only the relative flux j crosses the boundary.</p>
+      <ul><li>Bath and grain: d(M<sub>bath</sub>)/dt = −N·(water entering one grain).</li><li>Neglected: cracks/fissures, moisture-dependent D (explore in Stage 5), leaching, temperature change of the bath.</li></ul></div>`,
+  defs: [['X', 'Moisture content, dry basis: kg water per kg dry solid', 'kg/kg'], ['w = X/(1+X)', 'Moisture content, wet basis (mass fraction of water)', '–'], ['X_nat', 'Soaking capacity of native (ungelatinized) starch', 'kg/kg'], ['D', 'Water diffusivity in the grain', 'm²/s'], ['j', 'Water mass flux relative to the solid', 'kg/(m²·s)'], ['ρ_d', 'Dry solid per unit grain volume', 'kg/m³'], ['Fo = Dt/R²', 'Mass-transfer Fourier number', '–'], ['R/R₀', 'Swelling ratio of the radius', '–']],
+  questions: ['Switch the plot to √time. Over what range is it a straight line, and why?', 'Switch to Fo. Do the three grain sizes collapse? What does that say about time ∝ R²?', 'Compare 10 °C and 50 °C soaking. Is the change consistent with E_a = 32.5 kJ/mol?'],
+  record: (r, v) => [`R ${(r.R0 * 1e3).toFixed(2)} mm ${v.geom}, soak ${v.Ts} °C, ${v.tEnd} h`, `⟨X⟩ end ${r.final.Xmean.toFixed(3)} (${wb(r.final.Xmean).toFixed(1)} % wb), 90 % at ${fmtT(r.t90)}, R/R₀ ${(r.final.R / r.R0).toFixed(3)}`],
+  kitchen: 'soak'
+});
+
+/* ---------------- Stage 4: the race ---------------- */
+STAGES.push({
+  key: 'race', icon: 'race', short: 'The race', brief: ['d', 'f'],
+  title: 'Heat versus water: which one sets the cooking time?',
+  intro: 'Both heat and water obey diffusion-type equations, ∂φ/∂t = Γ∇²φ, with time scale t ~ R²/Γ. The Lewis number Le = α/D compares the two diffusivities. Same grain, same boiling water — watch both reach the centre.',
+  sceneTitle: 'Split grain: temperature (left) · moisture (right)', tags: [['calc', 'both fields, both progress bars'], ['illus', 'grain outline and shine']],
+  controls: [
+    { k: 'grain', label: 'Grain', type: 'select', options: grainOptions, v: 'medium' },
+    { k: 'Rc', label: 'Custom equivalent radius', unit: 'mm', min: 0.4, max: 2.5, step: 0.05, v: 1.0, show: v => v.grain === 'custom' },
+    { k: 'geom', label: 'Geometry', type: 'select', options: geomOptions, v: 'sphere' },
+    { k: 'Tb', label: 'Water temperature', unit: '°C', min: 70, max: 125, step: 1, v: 100 },
+    { k: 'h', label: 'h (water to grain)', unit: 'W/m²K', min: 200, max: 6000, step: 50, v: 1500 }
+  ],
+  presets: [['Boiling water', { Tb: 100 }], ['3000 m (90 °C)', { Tb: 90 }], ['Pressure cooker (120 °C)', { Tb: 120 }]],
+  logTime: true,
+  speeds: [0.5, 1, 2, 4],
+  compute(v) {
+    const R = presetR(v.grain, v.geom, v.Rc);
+    const run = P.runGrain({ grain: { geom: v.geom, R0: R, N: 60, level: 4, T0: 25 }, bath: { TC: v.Tb, h: v.h }, tEnd: 1e4, nOut: 360, logOut: true, logStart: 0.02, dtMax: 1 });
+    const alpha = P.grainAlpha(PD.X0, PD), D = P.diffusivity(v.Tb, PD, P.LEVELS[4], 1);
+    const th = run.Tc.map(T => (T - 25) / (v.Tb - 25)), xw = run.Xc.map(x => (x - PD.X0) / (PD.Xgel - PD.X0));
+    const tH = P.crossTime(run.t, th, 0.99), tW = P.crossTime(run.t, xw, 0.5);
+    return Object.assign(run, { R0: R, alpha, D, Le: alpha / D, th, xw, tH, tW, v });
+  },
+  marks: r => [r.tH != null && ['heat 99 %', r.tH], r.tW != null && ['water 50 %', r.tW]],
+  showAt: r => 30,
+  scene(r, t, ph, v) {
+    const i = idxAt(r.t, t), pr = r.profiles[i];
+    let s = SCENE_DEFS + `<rect width="760" height="400" fill="var(--panel2)"/>`;
+    const left = PL.profileRings(pr, (q, j) => PL.heatColor(q.T[j], 15, 125), null, 40), right = PL.profileRings(pr, (q, j) => PL.moistColor(q.X[j]), null, 40);
+    const RR = r.R[i] / r.R0;
+    s += PL.grainSection({ cx: 230, cy: 190, a: 170 * RR / 1.4, b: 115 * RR / 1.4, split: { left, right }, outline0: 1 / RR, uid: 'r4', gloss: 0.3, theme: theme(), stroke: 'var(--ink)' });
+    s += T(120, 40, 'temperature', { anchor: 'middle', weight: 600, fill: 'var(--heat)', halo: 3 }) + T(340, 40, 'moisture', { anchor: 'middle', weight: 600, fill: 'var(--water)', halo: 3 });
+    // progress bars
+    const bar = (y, label, f, col, tt) => `<text x="440" y="${y - 8}" font-size="13" font-weight="600" fill="var(--ink)" font-family="var(--sans)">${label}</text><rect x="440" y="${y}" width="290" height="22" rx="11" fill="var(--panel)" stroke="var(--line)"/><rect x="440" y="${y}" width="${290 * clamp(f, 0, 1)}" height="22" rx="11" fill="${col}"/><text x="726" y="${y + 16}" font-size="12" text-anchor="end" fill="var(--ink)" font-family="var(--sans)" font-weight="600">${(100 * clamp(f, 0, 1)).toFixed(0)} %</text>` + (tt ? T_(440, y + 38, tt, 11) : '');
+    s += bar(90, 'Heat to the centre (T_c − T₀)/(T_water − T₀)', r.th[i], 'var(--heat)', `99 % reached at ${fmtT(r.tH)}`);
+    s += bar(175, 'Water to the centre (X_c − X₀)/(X_gel − X₀)', r.xw[i], 'var(--water)', `50 % reached at ${fmtT(r.tW)}`);
+    s += T(440, 270, `Le = α/D ≈ ${Math.round(r.Le)}`, { size: 22, weight: 700 });
+    s += T_(440, 292, `α = ${fmt(r.alpha, 3)} m²/s   ·   D = ${fmt(r.D, 3)} m²/s`, 12);
+    s += T_(440, 312, `water is ≈ ${r.tW && r.tH ? Math.round(r.tW / r.tH) : '—'}× slower to reach the centre`, 12.5, null, 'var(--ink)');
+    // log time ruler
+    const x0 = 40, x1 = 720, y = 370, lx = tt => x0 + (x1 - x0) * (Math.log10(Math.max(tt, 0.02)) - Math.log10(0.02)) / (4 - Math.log10(0.02));
+    s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="var(--muted)"/>`;
+    for (const [tt, l] of [[0.1, '0.1 s'], [1, '1 s'], [10, '10 s'], [60, '1 min'], [600, '10 min'], [3600, '1 h']]) s += `<line x1="${lx(tt)}" y1="${y - 4}" x2="${lx(tt)}" y2="${y + 4}" stroke="var(--muted)"/>` + T_(lx(tt), y + 18, l, 10.5, 'middle');
+    s += `<circle cx="${lx(t)}" cy="${y}" r="6" fill="var(--accent)"/>` + T_(x0, y - 10, 'time (log scale)', 10.5);
+    return s;
+  },
+  metrics(r, t) { const i = idxAt(r.t, t); return [['Heat progress at centre', fmt(100 * r.th[i], 3), '%', true], ['Water progress at centre', fmt(100 * r.xw[i], 3), '%', true], ['Lewis number α/D', fmt(r.Le, 3), '–'], ['Ratio of times (water 50 % / heat 99 %)', fmt(r.tW / r.tH, 3), '–'], ['α (grain)', fmt(r.alpha, 3), 'm²/s'], ['D (gelatinized, at T)', fmt(r.D, 3), 'm²/s'], ['R²/α', fmtT(r.R0 * r.R0 / r.alpha), ''], ['R²/D', fmtT(r.R0 * r.R0 / r.D), '']]; },
+  explain() {
+    return `<h3>What this shows</h3><p><b>Same equation, very different speeds.</b> Heat and water both spread by diffusion, so both obey the same type of equation, and the time to reach the centre scales as size² ÷ diffusivity. Heat diffuses through a grain hundreds of times faster than water does, so heat wins the race easily.</p>
+    <p><b>What this means for cooking.</b> The slow process sets the pace, like the narrowest pipe in a series. Here that is water transport, so a cooking time estimated from heat conduction alone would be wildly too short.</p>
+    <p><b>Where the heat–mass analogy fails</b> (the slides warn that a common mathematical form is not physical equivalence):</p>
+    <table class="def"><tr><th></th><th>Heat</th><th>Water</th></tr>
+      <tr><td>Stored quantity</td><td>ρcT (J/m³)</td><td>ρ<sub>d</sub>X (kg/m³)</td></tr><tr><td>Driving gradient</td><td>∇T</td><td>∇X (really chemical potential)</td></tr>
+      <tr><td>Surface condition</td><td>convective, h(T − T<sub>w</sub>)</td><td>equilibrium X = capacity — which itself changes as starch gelatinizes</td></tr>
+      <tr><td>Property</td><td>α ≈ 1.2×10⁻⁷ m²/s, nearly constant</td><td>D ≈ 10⁻¹¹–10⁻¹⁰ m²/s, depends on T, X and starch state</td></tr>
+      <tr><td>Geometry</td><td>fixed</td><td>boundary moves (swelling)</td></tr>
+      <tr><td>Reference frame</td><td>stationary solid</td><td>flux relative to the solid, not to the mass-average velocity</td></tr></table>`;
+  },
+  predict: { q: 'How many times longer does water take than heat to reach the centre?', unit: '×', answer: r => r.tW / r.tH, hint: 'Compare α ≈ 10⁻⁷ m²/s with D ≈ 3×10⁻¹⁰ m²/s.' },
+  plots(r, t, v, th) {
+    return [{ id: 'p4', title: 'The race to the centre (log time)', spec: { xLabel: 'time (s), log scale', yLabel: 'fraction of the way to the surface value', xLog: true, xMin: 0.02, xMax: 1e4, yMin: 0, yMax: 1.02, legend: 'top',
+      series: [{ name: 'centre temperature', x: r.t, y: r.th, color: th.series[2], width: 2.4 }, { name: 'centre moisture', x: r.t, y: r.xw, color: th.series[1], width: 2.4 }],
+      vlines: [{ x: r.R0 * r.R0 / r.alpha, label: 'R²/α', color: th.series[2] }, { x: r.R0 * r.R0 / r.D, label: 'R²/D', color: th.series[1], row: 1 }], cursorX: Math.max(t, 0.02) } }];
+  },
+  checks(r) {
+    return [[Math.abs(r.final.waterResidual) / r.final.waterIn < 1e-9 && Math.abs(r.final.energyResidual) / Math.abs(r.final.energyIn) < 1e-9, 'Water and energy balances of the grain both close', Math.max(Math.abs(r.final.waterResidual) / r.final.waterIn, Math.abs(r.final.energyResidual) / Math.abs(r.final.energyIn)), 'relative'],
+      [null, 'Units check: α and D are both m²/s, so Le is dimensionless and R²/Γ is a time', r.Le, 'Le'],
+      [r.tW > 10 * r.tH, 'Water is at least 10× slower than heat (heat is not rate-limiting)', r.tW / r.tH, 'ratio']];
+  },
+  equations: `
+    <div class="eqbox"><h4>Same form, different physics</h4><div class="eq">∂φ/∂t = Γ ∇²φ   ⇒   t<sub>d</sub> ~ L²/Γ   <span class="src">(slide 56)</span></div>
+      <p>φ = T with Γ = α (heat), φ = X with Γ = D (water). Le = α/D compares them; for a rice grain Le ≈ 10²–10³.</p>
+      <p>The slide’s warning applies: the equations look alike, but the boundary conditions, the property dependence and the geometry differ (table on the left).</p></div>
+    <div class="eqbox"><h4>What is computed</h4><p>One full model run (L4: starch state, swelling, D(T)) in water at the chosen temperature, from 25 °C. Progress at the centre is θ = (T<sub>c</sub> − T₀)/(T<sub>w</sub> − T₀) and φ = (X<sub>c</sub> − X₀)/(X<sub>gel</sub> − X₀).</p></div>`,
+  defs: [['α', 'Thermal diffusivity k/(ρc)', 'm²/s'], ['D', 'Water diffusivity', 'm²/s'], ['Le = α/D', 'Lewis number', '–'], ['t_d ~ L²/Γ', 'Diffusion time scale over distance L', 's'], ['θ, φ', 'Normalized centre temperature and moisture', '–']],
+  questions: ['Change the water temperature from 90 to 120 °C. Which time changes more, and why?', 'Change h. Does it change the water time? Why not?', 'Name two reasons why R²/D is still not the cooking time.'],
+  record: (r, v) => [`R ${(r.R0 * 1e3).toFixed(2)} mm ${v.geom}, water ${v.Tb} °C, h ${v.h}`, `heat 99 % ${fmtT(r.tH)}, water 50 % ${fmtT(r.tW)}, Le ${Math.round(r.Le)}`]
+});
+
+/* ---------------- Stage 5: cook one grain ---------------- */
+STAGES.push({
+  key: 'cook', icon: 'cook', short: 'Cook a grain', brief: ['a', 'c', 'e', 'f'],
+  title: 'Inside a cooking grain: water, gelatinization and swelling',
+  intro: 'Above ≈ 68 °C, starch that has enough water gelatinizes: granules lose their order, the grain turns translucent and can hold several times more water. That raises the water capacity, the grain swells and its boundary moves. Climb the model ladder to see which assumption changes the answer.',
+  sceneTitle: 'One grain in hot water', tags: [['calc', 'moisture colour, white core (1 − G), size'], ['illus', 'grain outline and shine, glass plates']],
+  controls: [
+    { k: 'grain', label: 'Grain', type: 'select', options: grainOptions, v: 'medium' },
+    { k: 'Rc', label: 'Custom equivalent radius', unit: 'mm', min: 0.4, max: 2.5, step: 0.05, v: 1.0, show: v => v.grain === 'custom' },
+    { k: 'geom', label: 'Geometry', type: 'select', options: geomOptions, v: 'sphere' },
+    { k: 'rice', label: 'Rice', type: 'seg', options: [['white', 'White (milled)'], ['brown', 'Brown']], v: 'white' },
+    { k: 'presoak', label: 'Presoak before cooking', unit: 'min', min: 0, max: 240, step: 5, v: 0 },
+    { k: 'place', label: 'Cooking water', type: 'select', options: placeOptions.concat([['custom', 'Custom temperature']]), v: 'sea' },
+    { k: 'Tc', label: 'Custom water temperature', unit: '°C', min: 70, max: 125, step: 1, v: 95, show: v => v.place === 'custom' },
+    { k: 'level', label: 'Model ladder', type: 'ladder', v: 4 },
+    { k: 'compare', label: 'Overlay all four rungs', type: 'toggle', v: false },
+    { k: 'bX', label: 'Explore: D rises with moisture, b', unit: '–', min: 0, max: 3, step: 0.1, v: 0, hint: 'D × exp[b(X − X₀)]. 0 = off (default). A hypothesis to test, not a fitted value.' },
+    { k: 'Xgel', label: 'Water capacity of gelatinized starch X_gel', unit: 'kg/kg', min: 1.5, max: 3.5, step: 0.05, v: 2.6 },
+    { k: 'tEnd', label: 'Duration', unit: 'min', min: 10, max: 60, step: 1, v: 25 }
+  ],
+  presets: [['Unsoaked, boiling', { presoak: 0, place: 'sea', rice: 'white' }], ['Soaked 30 min', { presoak: 30 }], ['Pressure cooker', { place: 'cooker' }], ['At 3000 m', { place: 'alt3000' }], ['Brown rice', { rice: 'brown' }]],
+  speeds: [10, 30, 60, 120, 240],
+  compute(v) {
+    const R = presetR(v.grain, v.geom, v.Rc);
+    const TC = v.place === 'custom' ? v.Tc : P.placeBoilingPoint(v.place);
+    const params = { Xgel: v.Xgel, bX: v.bX, Dfactor: v.rice === 'brown' ? PD.brownFactor : 1 };
+    const base = { grain: { geom: v.geom, R0: R, N: 60, level: v.level, T0: 25, params }, presoak: v.presoak ? { TC: 25, t: v.presoak * 60 } : null, bath: { TC }, tEnd: v.tEnd * 60, nOut: 360, dtMax: 1 };
+    const run = P.runGrain(base);
+    const ladder = v.compare ? [1, 2, 3, 4].map(L => ({ L, r: P.runGrain(Object.assign({}, base, { grain: Object.assign({}, base.grain, { level: L }), keepProfiles: false })) })) : [];
+    const half = P.runGrain(Object.assign({}, base, { dtMax: 0.5, frac: 0.01, grain: Object.assign({}, base.grain, { N: 90 }), keepProfiles: false, nOut: 720 }));
+    return Object.assign(run, { R0: R, TC, ladder, tHalf: half.events.tCoreGel, v });
+  },
+  marks: r => [r.events.tCoreGel != null && ['core gelatinized', r.events.tCoreGel]],
+  showAt: r => r.events.tCoreGel ? 0.55 * r.events.tCoreGel : 0.3 * r.t[r.t.length - 1],
+  scene(r, t, ph, v) {
+    const i = idxAt(r.t, t), pr = r.profiles[i], RR = r.R[i] / r.R0;
+    let s = SCENE_DEFS + `<rect width="760" height="400" fill="${PL.heatColor(r.TC, 15, 125)}" opacity=".16"/>`;
+    for (let k = 0; k < 10; k++) { const u = (ph * 0.25 + k / 10) % 1; s += `<circle cx="${(k * 83) % 760}" cy="${390 - u * 380}" r="${2 + 3 * u}" fill="none" stroke="var(--muted)" stroke-opacity="${0.35 * (1 - u)}"/>`; }
+    const rings = PL.profileRings(pr, (q, j) => PL.moistColor(q.X[j]), (q, j) => 1 - q.G[j], 40);
+    const sc = 1 / 1.75, a = 190 * RR * sc, b = 122 * RR * sc;
+    let front = null; for (let j = pr.G.length - 1; j >= 0; j--) if (pr.G[j] < 0.5) { front = pr.rf[j + 1] / pr.R; break; }
+    s += PL.grainSection({ cx: 270, cy: 200, a, b, rings, chalk: true, outline0: 1 / RR, front: front && front < 0.999 ? front : null, uid: 'c5', gloss: r.Gmean[i], theme: theme(), stroke: 'var(--ink)' });
+    s += T(270, 30, `${fmtT(t)} in water at ${r.TC.toFixed(1)} °C`, { anchor: 'middle', weight: 600, size: 14, halo: 3 });
+    s += T_(270, 385, 'red dashed: gelatinization front (G = 0.5) · grey dashed: raw size', 11, 'middle');
+    // glass-plate view
+    const coreFrac = front || 0;
+    const ga = 60 * Math.min(1.25, RR * 0.72), gb = 40 * Math.min(1.25, RR * 0.72);
+    s += `<g transform="translate(560 70)"><rect x="-70" y="-30" width="170" height="150" rx="10" fill="var(--panel)" stroke="var(--line)"/>${T_(15, -12, 'glass-plate view (pressed grain)', 10.5, 'middle')}`;
+    s += `<rect x="-58" y="-2" width="150" height="104" rx="3" fill="#2b2f33"/>`;                          // dark backing makes the white core visible
+    s += `<path d="${PL.ricePath(15, 50, ga, gb)}" fill="#d9d5c8" opacity=".55" stroke="#bdb6a6"/>`;
+    if (coreFrac > 0.02) s += `<path d="${PL.ricePath(15, 50, ga * coreFrac, gb * coreFrac)}" fill="#ffffff" opacity=".95"/>`;
+    s += `<rect x="-58" y="-2" width="150" height="104" rx="3" fill="url(#glassG)" stroke="#9fb0b8" stroke-width="1.5"/><line x1="-48" y1="96" x2="20" y2="4" stroke="#ffffff" stroke-opacity=".35" stroke-width="5" stroke-linecap="round"/>`;
+    s += T_(15, 110, coreFrac > 0.02 ? 'white core still visible' : 'no white core', 11, 'middle', coreFrac > 0.02 ? 'var(--muted)' : 'var(--good)') + '</g>';
+    // gauges
+    const g = (y, label, val, max, col, txt) => `<text x="490" y="${y}" font-size="12" fill="var(--ink)" font-family="var(--sans)">${label}</text><rect x="490" y="${y + 6}" width="240" height="10" rx="5" fill="var(--panel)" stroke="var(--line)"/><rect x="490" y="${y + 6}" width="${240 * clamp(val / max, 0, 1)}" height="10" rx="5" fill="${col}"/><text x="730" y="${y}" font-size="12" text-anchor="end" font-weight="600" fill="var(--ink)" font-family="var(--sans)">${txt}</text>`;
+    s += g(250, 'Mean water ⟨X⟩', r.Xmean[i], 3, 'var(--water)', `${r.Xmean[i].toFixed(2)} kg/kg · ${wb(r.Xmean[i]).toFixed(0)} % wb`);
+    s += g(285, 'Gelatinized at centre G_c', r.Gc[i], 1, 'var(--leaf)', r.Gc[i].toFixed(2));
+    s += g(320, 'Radius R/R₀', RR - 1, 0.8, 'var(--accent)', RR.toFixed(2));
+    s += cbar(490, 352, 240, 'moisture', 'dry', 'wet (75 % wb)', '', 'cb5');
+    s += T_(20, 385, `${P.LEVELS[v.level].short}`, 11.5, null, 'var(--accent-ink)');
+    return s;
+  },
+  metrics(r, t, v) {
+    const i = idxAt(r.t, t), j = Math.max(1, i), dR = (r.R[i] - r.R[j - 1]) / ((r.t[i] - r.t[j - 1]) || 1);
+    return [['Core gelatinized at', fmtT(r.events.tCoreGel), 'G_c ≥ 0.9 (chosen criterion)', true], ['Mean water ⟨X⟩', fmt(r.Xmean[i], 3), `kg/kg · ${wb(r.Xmean[i]).toFixed(1)} % wb`], ['Centre water X_c', fmt(r.Xc[i], 3), 'kg/kg'], ['Centre gelatinized G_c', r.Gc[i].toFixed(2), '0–1'], ['Swelling R/R₀', fmt(r.R[i] / r.R0, 3), '–'], ['Boundary speed dR/dt', fmt(dR * 1e6 * 60, 3), 'µm/min'], ['Water absorbed (one grain)', fmt(r.waterIn[i] * 1e6, 3), 'mg'], ['Water temperature', fmt(r.TC, 4), '°C']];
+  },
+  explain(r, t, v) {
+    const rung = { 1: 'The simplest picture: plain diffusion into a rigid grain whose surface already holds all the water cooked rice will hold. It ignores that raw starch cannot take that water until it gelatinizes.',
+      2: 'Starch now has to gelatinize before it can hold the extra water, and that needs both heat and water. So a gelatinization front follows the water front inward.',
+      3: 'Each layer of the grain grows as it takes up water, so the grain swells and its boundary moves outward. Water must cross a thicker, wetter layer to reach the core, which slows it down.',
+      4: 'The diffusivity also depends on the local temperature, so the water temperature (altitude or pressure cooker) changes transport as well as gelatinization.' }[v.level];
+    let h = `<h3>What this shows</h3>
+      <p><b>A material that changes while it is transported through.</b> Raw rice starch is packed in tight, partly crystalline granules: it is opaque and hard, and holds little water. Once a region of the grain is both hot enough and wet enough, the granules gelatinize. They lose their order, soak up several times more water, swell, and turn soft and translucent.</p>
+      <p><b>Why a white core.</b> Water arrives from the outside, so the outer layers gelatinize first. The core stays raw and white until the water front reaches it, which is exactly what the glass-plate test looks for.</p>
+      <p><b>Swelling moves the boundary.</b> Because the grain grows as it absorbs water, its surface is a moving boundary, and the balance must account for it (moving control volume).</p>
+      <p><b>This rung of the model ladder:</b> ${rung}</p>`;
+    if (v.presoak) h += `<p class="warn">In this model, presoaking helps less than many kitchen and literature reports suggest. Possible reasons: soaking cracks the grain, the diffusivity rises with moisture (try the b slider), or the core may turn translucent before it is fully gelatinized.</p>`;
+    return h;
+  },
+  predict: { q: 'How many minutes until the grain’s core is gelatinized?', unit: 'min', answer: r => r.events.tCoreGel ? r.events.tCoreGel / 60 : null, hint: 'Use Stage 4: water, not heat, is the slow step.' },
+  plots(r, t, v, th) {
+    const snaps = [1, 3, 5, 8, 12, 18].filter(m => m * 60 <= r.t[r.t.length - 1]);
+    const col = j => PL.lerpColor(['#d9a441', '#2e75a8', '#1d4677'], j / Math.max(1, snaps.length - 1));
+    const cur = r.profiles[idxAt(r.t, t)];
+    const Xs = snaps.map((m, j) => { const p = r.profiles[idxAt(r.t, m * 60)]; return { name: `${m} min`, x: p.r.map(x => x * 1e3), y: p.X, color: col(j), width: 1.8 }; }).concat([{ name: 'now', x: cur.r.map(x => x * 1e3), y: cur.X, color: th.ink, width: 2.6 }]);
+    const Gs = snaps.map((m, j) => { const p = r.profiles[idxAt(r.t, m * 60)]; return { name: `${m} min`, x: p.r.map(x => x * 1e3), y: p.G, color: col(j), width: 1.8 }; }).concat([{ name: 'now', x: cur.r.map(x => x * 1e3), y: cur.G, color: th.ink, width: 2.6 }]);
+    const tm = r.t.map(x => x / 60);
+    const out = [
+      { id: 'p5x', title: 'Moisture profiles (the end of each curve is the moving surface)', spec: { xLabel: 'r (mm)', yLabel: 'X (kg/kg dry basis)', legend: 'right', series: Xs, vlines: [{ x: r.R0 * 1e3, label: 'R₀' }] } },
+      { id: 'p5g', title: 'Gelatinization front', spec: { xLabel: 'r (mm)', yLabel: 'G (degree of gelatinization)', yMin: 0, yMax: 1.02, legend: 'right', series: Gs } },
+      { id: 'p5t', title: 'Mean water, centre gelatinization and swelling vs time', spec: { xLabel: 'time (min)', yLabel: 'value', legend: 'top', series: [{ name: '⟨X⟩ (kg/kg)', x: tm, y: r.Xmean, color: th.series[1] }, { name: 'G at centre', x: tm, y: r.Gc, color: th.series[3] }, { name: 'R/R₀', x: tm, y: r.R.map(x => x / r.R0), color: th.series[0] }], hlines: [{ y: PD.G_done, label: 'G = 0.9' }], cursorX: t / 60 }, kitchen: true }];
+    if (r.ladder.length) out.push({ id: 'p5l', title: 'Model ladder: centre gelatinization for L1–L4', spec: { xLabel: 'time (min)', yLabel: 'G at centre', yMin: 0, yMax: 1.02, legend: 'right', series: r.ladder.map((l, j) => ({ name: `${P.LEVELS[l.L].short} · ${fmtT(l.r.events.tCoreGel)}`, x: l.r.t.map(x => x / 60), y: l.r.Gc, color: th.series[j], width: v.level === l.L ? 3 : 1.8 })), hlines: [{ y: PD.G_done }], cursorX: t / 60 } });
+    const g = book.kitchen.glass.rows.filter(rw => isFinite(rw.t) && isFinite(rw.p));
+    if (g.length) out[2].spec.series.push({ name: 'observed: 1 − (fraction with white core)', x: g.map(o => o.t), y: g.map(o => 1 - o.p / 100), points: 'square', color: cssVar('obs') || '#3f7d34' });
+    return out;
+  },
+  checks(r, v) {
+    const f = r.final, wr = Math.abs(f.waterResidual) / f.waterIn, er = Math.abs(f.energyResidual) / Math.abs(f.energyIn), vr = Math.abs(f.Vgeom - f.Vshell) / f.Vshell;
+    const ch = r.tHalf && r.events.tCoreGel ? Math.abs(r.tHalf - r.events.tCoreGel) / r.tHalf : null;
+    let pe = 0; for (let i = 1; i < r.t.length; i++) { const flux = (r.waterIn[i] - r.waterIn[i - 1]) / (r.t[i] - r.t[i - 1]) / (P.areaAt(r.R[i], P.GEOM[v.geom]) * PD.rho_w); pe = Math.max(pe, flux * r.R[i] / P.grainAlpha(2, PD)); }
+    return [[wr < 1e-9, 'Water: stored − initial = ∫ inflow through the moving surface', wr, 'relative'], [er < 1e-9, 'Energy: stored (incl. gelatinization enthalpy) = heat conducted + enthalpy carried by water', er, 'relative'],
+      [true, 'Dry solid conserved: shells follow the solid', 0, 'exact by construction'], [vr < 1e-12, 'Volume additivity: geometric volume = Σ shell volumes', vr, 'relative'],
+      [pe < 0.1, 'Péclet number of enthalpy carried by water, Pe = vR/α (convection of heat negligible)', pe, 'max'], [f.gelHeat / f.energyIn < 0.05, 'Gelatinization enthalpy small vs energy absorbed', f.gelHeat / f.energyIn, 'ratio'],
+      [ch != null && ch < 0.02, 'Resolution: finer grid (N = 90) and half time step change the core time by', ch, 'relative']];
+  },
+  equations: `
+    <div class="eqbox"><h4>Three coupled fields in one moving CV</h4>
+      <div class="eq">∂(ρ<sub>d</sub>X)/∂t = −∇·<b>j</b>,  <b>j</b> = −ρ<sub>d</sub>D(T,G,X)∇X</div>
+      <div class="eq">∂/∂t[ρ<sub>d</sub>(c<sub>s</sub> + Xc<sub>w</sub>)T] = ∇·(k∇T) − ∇·(c<sub>w</sub>T<b>j</b>) − ρ<sub>d</sub>ΔH<sub>gel</sub> ∂G/∂t</div>
+      <div class="eq">∂G/∂t = k<sub>g</sub>(T) f(X) (1 − G)</div>
+      <p>Grid shells hold fixed dry mass and move with the solid (Lagrangian), so the slide-18 moving-boundary term is handled exactly; only the relative flux crosses shell faces.</p></div>
+    <div class="eqbox"><h4>Boundary conditions and material laws</h4>
+      <div class="eq">X(R,t) = X<sub>nat</sub> + G<sub>s</sub>(X<sub>gel</sub> − X<sub>nat</sub>);   −k∂T/∂r|<sub>R</sub> = h(T − T<sub>w</sub>)</div>
+      <div class="eq">D = [D<sub>nat</sub>(1−G) + D<sub>gel</sub>G]·e<sup>−E<sub>a</sub>/R<sub>g</sub>(1/T − 1/T<sub>ref</sub>)</sup>·e<sup>b(X−X₀)</sup></div>
+      <ul><li>k<sub>g</sub>: first order, Arrhenius (E<sub>g</sub> = 120 kJ/mol, 0.05 s⁻¹ at 95 °C), smooth onset at T<sub>on</sub> = 68 °C — illustrative, Lund (1984).</li><li>f(X) rises from 0 to 1 between X = 0.30 and 0.80: gelatinization needs water (Donovan 1979). X_lo must be below X_nat or gelatinization can never start.</li><li>Swelling: V<sub>shell</sub> = m<sub>s</sub>(1/ρ<sub>s</sub> + X/ρ<sub>w</sub>).</li></ul></div>
+    <div class="eqbox"><h4>Model ladder</h4><ul><li><b>L1</b> constant D, fixed size, surface at X_gel from t = 0.</li><li><b>L2</b> + starch state controls capacity and D (Briffaz two-population idea).</li><li><b>L3</b> + swelling (moving boundary).</li><li><b>L4</b> + D(T).</li></ul>
+      <p><b>Neglected:</b> real 3D ellipsoid shape (sphere vs cylinder brackets it — Stage 7), cracks and fissures, leaching of amylose and solids, slow further uptake after cooking (Briffaz report large swelling after long cooking), retrogradation, grain-to-grain contact.</p></div>`,
+  defs: [['G', 'Degree of gelatinization: 0 native, 1 fully gelatinized', '–'], ['X_gel', 'Water capacity of gelatinized starch at the surface', 'kg/kg'], ['k_g', 'Gelatinization rate constant', '1/s'], ['T_on', 'Gelatinization onset temperature', '°C'], ['ΔH_gel', 'Gelatinization enthalpy', 'J/kg dry'], ['R/R₀, dR/dt', 'Swelling ratio and speed of the moving boundary', '–; m/s'], ['t_core', 'Time when G at the centre reaches 0.9 (our criterion)', 's']],
+  questions: ['Climb from L1 to L4. Which single assumption changes the core time the most? Why?', 'Presoak 0, 30, 120 min. Does the model reproduce the size of the effect you expect? If not, test b > 0.', 'Compare sea level, 3000 m and the pressure cooker. Why does the temperature matter even though heat is not the slow step?'],
+  record: (r, v) => [`R ${(r.R0 * 1e3).toFixed(2)} mm ${v.geom}, ${v.rice}, presoak ${v.presoak} min, water ${r.TC.toFixed(1)} °C, ${P.LEVELS[v.level].short}${v.bX ? `, b ${v.bX}` : ''}`, `core gelatinized ${fmtT(r.events.tCoreGel)}; ⟨X⟩ end ${r.final.Xmean.toFixed(2)}; R/R₀ ${(r.final.R / r.R0).toFixed(2)}`],
+  kitchen: 'glass'
+});
+
+/* ---------------- Stage 6: the whole pot ---------------- */
+STAGES.push({
+  key: 'pot2', icon: 'pot2', short: 'The whole pot', brief: ['a', 'b', 'c', 'd'],
+  title: 'The whole pot: does the water end up in the rice or in the air?',
+  intro: 'Now couple Stage 1 and Stage 5. Control volume A is the free water in the pot; control volume B is the rice (many identical grains, each a moving-boundary CV). Water leaves A into the grains and as steam. The absorption method works only if the free water runs out after the core has gelatinized.',
+  sceneTitle: 'Pot with rice', tags: [['calc', 'water level, grain size & colour, steam rate, ledgers'], ['illus', 'grain positions and shape, pot, flames, bubbles']],
+  controls: [
+    { k: 'method', label: 'Method', type: 'seg', options: [['absorb', 'Absorption'], ['excess', 'Excess water'], ['cooker', 'Pressure cooker']], v: 'absorb' },
+    { k: 'rice', label: 'Rice (raw)', unit: 'g', min: 100, max: 500, step: 10, v: 200 },
+    { k: 'ratio', label: 'Water : rice (by mass)', unit: '–', min: 1.2, max: 8, step: 0.1, v: 2.0, hint: '1 cup rice : 2 cups water ≈ 1 : 2.4 by mass.' },
+    { k: 'addAt', label: 'Add the rice', type: 'seg', options: [['start', 'to cold water'], ['boil', 'when it boils']], v: 'start' },
+    { k: 'Pboil', label: 'Heat to bring to the boil', unit: 'W', min: 300, max: 3000, step: 50, v: 1500 },
+    { k: 'simmer', label: 'Turn down after boiling', type: 'toggle', v: true },
+    { k: 'Psim', label: 'Simmer power', unit: 'W', min: 50, max: 1500, step: 25, v: 300, show: v => v.simmer },
+    { k: 'lid', label: 'Lid on', type: 'toggle', v: true },
+    { k: 'place', label: 'Where?', type: 'select', options: placeOptions.filter(o => o[0] !== 'cooker'), v: 'sea' },
+    { k: 'presoak', label: 'Presoak', unit: 'min', min: 0, max: 120, step: 5, v: 0 },
+    { k: 'grain', label: 'Grain', type: 'select', options: grainOptions.filter(o => o[0] !== 'custom'), v: 'medium' },
+    { k: 'rest', label: 'Rest with lid after the water is gone', unit: 'min', min: 0, max: 15, step: 1, v: 10 },
+    { k: 'tEnd', label: 'Duration', unit: 'min', min: 15, max: 60, step: 1, v: 45 }
+  ],
+  presets: [['Absorption, lid on', { method: 'absorb', ratio: 2.0, lid: true, simmer: true, Psim: 300, addAt: 'start' }], ['Too little water', { method: 'absorb', ratio: 1.4 }], ['Lid off, strong simmer', { lid: false, Psim: 900 }], ['Excess water (drain later)', { method: 'excess', ratio: 6, lid: false, addAt: 'boil', Psim: 700 }], ['Pressure cooker', { method: 'cooker', ratio: 2.0 }]],
+  speeds: [10, 30, 60, 120, 240],
+  compute(v) {
+    const cooker = v.method === 'cooker', pl = P.PLACES[cooker ? 'cooker' : v.place];
+    const R = P.equivalentSize(P.GRAIN_PRESETS[v.grain], 'sphere');
+    const run = P.runPot({ water: v.rice / 1000 * v.ratio, Pboil: v.Pboil, Psim: v.Psim, simmerAfterBoil: v.simmer, lid: v.lid || cooker, altitude: pl.altitude, cookerGauge: pl.gauge, tEnd: v.tEnd * 60, nOut: 360,
+      rice: { massRaw: v.rice / 1000, grain: { geom: 'sphere', R0: R, N: 40, level: 4 }, addAt: v.addAt, presoak: v.presoak ? { TC: 25, t: v.presoak * 60 } : null, restTime: v.rest * 60 } });
+    run.R0 = R; run.v = v; run.water0 = v.rice / 1000 * v.ratio; return run;
+  },
+  marks: r => [r.events.tBoil != null && ['boils', r.events.tBoil], r.events.tCoreGel != null && ['core done', r.events.tCoreGel], r.events.tDry != null && ['water gone', r.events.tDry]],
+  showAt: r => r.events.tCoreGel ? 0.7 * r.events.tCoreGel : 0.4 * r.t[r.t.length - 1],
+  scene(r, t, ph, v) {
+    const i = idxAt(r.t, t), Tp = r.Tp[i], M = Math.max(0, r.M[i]), cooker = v.method === 'cooker', phase = r.phase[i];
+    const added = r.events.tAdded == null || t >= r.events.tAdded;
+    const pr = r.profiles[i], RR = r.R[i] / r.R0, Xm = r.Xmean[i];
+    let s = SCENE_DEFS + `<rect width="760" height="400" fill="var(--panel2)"/>`;
+    const ev = r.evapRate[i] * 1000; s += steam(255, 104, 170, (v.lid || cooker) ? ev * 0.35 : ev, ph);
+    s += burner(255, 352, 210) + flames(255, 352, 210, r.power[i] || 0, ph);
+    const area = Math.PI * 0.09 * 0.09, px = 0.00045, Vl = M / P.waterRho(Tp), Vg = added ? r.Vgrains[i] : 0, bed = Vg / 0.6;
+    const hBed = clamp(bed / area / px, 0, 225), hLiq = clamp((Vl > 0.4 * bed ? (Vl + Vg) : Vl / 0.4) / area / px, 0, 225);
+    const x0 = 139, x1 = 371, yTop = 114, yBot = 340, yW = yBot - hLiq, wc = PL.heatColor(Tp, 15, 125);
+    s += potBack(x0, x1, yTop, yBot);
+    if (M > 0) s += `<rect x="${x0}" y="${yW}" width="${x1 - x0}" height="${yBot - yW}" fill="${wc}" opacity=".5"/>`;
+    if (phase === 'boiling') s += bubbles(x0 + 10, x1 - 10, yW + 6, yBot - 4, clamp(ev / 20, 0.15, 1), ph);
+    if (added) { const n = Math.round(clamp(v.rice / 200 * 55, 25, 90)); for (let k = 0; k < n; k++) { const g = LAYOUT[k], x = x0 + 12 + g.u * (x1 - x0 - 24), y = yBot - 6 - g.v * Math.max(6, hBed - 8); s += riceGrain(x, y, 8.5 * RR, 3.2 * RR, g.a, r.Gc[i], Xm, true); } }
+    if (M > 0) s += `<ellipse cx="${(x0 + x1) / 2}" cy="${yW}" rx="${(x1 - x0) / 2}" ry="5" fill="${wc}" opacity=".35"/><ellipse cx="${(x0 + x1) / 2}" cy="${yW}" rx="${(x1 - x0) / 2}" ry="5" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="1.2"/>`;
+    s += potFront(x0, x1, yTop, yBot);
+    if (cooker) s += potLid(x0, x1, yTop - 4, 'cooker'); else if (v.lid) s += potLid(x0, x1, yTop - 4, 'glass');
+    s += T(255, 30, `${Tp.toFixed(1)} °C · ${phase === 'rest' ? 'resting, heat off' : phase}`, { anchor: 'middle', weight: 600, size: 14, halo: 3 });
+    // water ledger (stacked bar)
+    const W0 = r.water0 * 1000 + (r.Mgrain[0] * 1000), bx = 440, by = 70, bh = 260;
+    const parts = [['in grains', r.Mgrain[i] * 1000, '#2e75a8'], ['free water', M * 1000, '#7fc0c8'], ['steam', r.Mevap[i] * 1000, '#c9b79a']];
+    let y = by + bh; s += T(bx, by - 18, 'Water ledger (g)', { weight: 600, size: 13 });
+    for (const [l, val, c] of parts) { const hh = bh * val / W0; y -= hh; s += `<rect x="${bx}" y="${y}" width="56" height="${Math.max(0, hh)}" fill="${c}"/>`; if (hh > 13) s += T(bx + 64, y + hh / 2 + 4, `${l}: ${val.toFixed(0)}`, { size: 12 }); }
+    s += `<rect x="${bx}" y="${by}" width="56" height="${bh}" fill="none" stroke="var(--muted)"/>` + T_(bx, by + bh + 16, `total ${W0.toFixed(0)} g (conserved)`, 11);
+    // representative grain
+    const rings = PL.profileRings(pr, (q, j) => PL.moistColor(q.X[j]), (q, j) => 1 - q.G[j], 30);
+    s += PL.grainSection({ cx: 660, cy: 180, a: 62 * RR / 1.6, b: 40 * RR / 1.6, rings, chalk: true, outline0: 1 / RR, uid: 'p6', gloss: r.Gc[i], theme: theme(), stroke: 'var(--ink)' });
+    s += T_(660, 120, 'one representative grain', 11, 'middle') + T_(660, 240, `⟨X⟩ ${Xm.toFixed(2)} · G_c ${r.Gc[i].toFixed(2)}`, 11.5, 'middle', 'var(--ink)');
+    if (r.events.tDry && t >= r.events.tDry && (r.events.tCoreGel == null || r.events.tCoreGel > r.events.tDry)) s += T(255, 60, 'Free water gone before the core gelatinized!', { anchor: 'middle', fill: 'var(--bad)', weight: 700, halo: 3 });
+    return s;
+  },
+  metrics(r, t, v) {
+    const i = idxAt(r.t, t), W0 = r.water0 * 1000;
+    const free = r.M[i] * 1000 < 0.05 ? 0 : r.M[i] * 1000;
+    return [['Pot temperature', fmt(r.Tp[i], 4), '°C'], ['Free water', fmt(free, 3), 'g'], ['Absorbed by rice', fmt((r.Mgrain[i] - r.Mgrain[0]) * 1000, 3), `g (${(100 * (r.Mgrain[i] - r.Mgrain[0]) * 1000 / W0).toFixed(0)} % of added)`, true], ['Left as steam', fmt(r.Mevap[i] * 1000, 3), 'g'],
+      ['Rice water content', fmt(wb(r.Xmean[i]), 3), '% wet basis'], ['Centre gelatinized G_c', r.Gc[i].toFixed(2), '0–1'], ['Core gelatinized at', fmtT(r.events.tCoreGel), ''], ['Free water gone at', fmtT(r.events.tDry), '']];
+  },
+  explain(r, t, v) {
+    const tg = r.events.tCoreGel, td = r.events.tDry;
+    let h = `<h3>What this shows</h3>
+      <p><b>Two control volumes sharing one supply.</b> The free water in the pot is one region; the rice grains are another. Water leaves the free water in two ways: into the grains (by diffusion, slow and steady) and out as steam (set by how much surplus heat the stove supplies).</p>
+      <p><b>Conservation ties them together.</b> Whatever leaves one region must appear in another, so free water + water in the grains + steam always adds up to the water you started with. The same holds for energy.</p>
+      <p><b>Why the method matters.</b> With the absorption method, the free water should run out just after the core has gelatinized. Too little water, or too much steam (lid off, high flame), leaves the core raw. With the excess-water method, there is always water left to drain.</p>`;
+    if (td != null && tg != null && td < tg) h += `<p class="warn">Here the free water ran out before the core gelatinized. The grain can only redistribute the water it already has, so the core risks staying raw. Add water, keep the lid on or lower the simmer.</p>`;
+    else if (td != null && tg != null) h += `<p class="good">Here the core gelatinized before the free water ran out: little water was wasted and none is left to drain.</p>`;
+    return h;
+  },
+  predict: { q: 'What percentage of the added water will end up inside the rice?', unit: '%', answer: r => 100 * (r.Mgrain[r.Mgrain.length - 1] - r.Mgrain[0]) / r.water0, hint: 'Think about the steam produced while it simmers.' },
+  plots(r, t, v, th) {
+    const tm = r.t.map(x => x / 60);
+    return [
+      { id: 'p6w', title: 'Where the water goes', stacked: true, spec: { xLabel: 'time (min)', yLabel: 'water (g)', legend: 'top', x: tm, series: [{ name: 'in grains', y: r.Mgrain.map(m => m * 1000), color: '#2e75a8' }, { name: 'free water', y: r.M.map(m => Math.max(0, m) * 1000), color: '#7fc0c8' }, { name: 'steam', y: r.Mevap.map(m => m * 1000), color: '#c9b79a' }], cursorX: t / 60 } },
+      { id: 'p6t', title: 'Pot temperature and the grain', spec: { xLabel: 'time (min)', yLabel: 'T (°C) · 100 G_c · 40 ⟨X⟩', yMin: 0, yMax: 125, legend: 'right', series: [{ name: 'pot water T', x: tm, y: r.Tp, color: th.series[2] }, { name: 'grain centre T', x: tm, y: r.Tc, color: th.series[0], dash: '5 3' }, { name: '100 × G_c', x: tm, y: r.Gc.map(g => 100 * g), color: th.series[3] }, { name: '40 × ⟨X⟩', x: tm, y: r.Xmean.map(x => 40 * x), color: th.series[1] }], cursorX: t / 60 } },
+      { id: 'p6e', title: 'Cumulative energy: heater → pot, rice, steam, losses', stacked: true, spec: { xLabel: 'time (min)', yLabel: 'energy (kJ)', legend: 'top', x: tm, series: [{ name: 'pot water + vessel', y: r.sensible.map(e => Math.max(0, e) / 1000), color: '#d2524a' }, { name: 'into the rice', y: r.cumToGrains.map(e => e / 1000), color: '#2e75a8' }, { name: 'steam', y: r.cumLatent.map(e => e / 1000), color: '#8fb3cf' }, { name: 'wall losses', y: r.cumLoss.map(e => e / 1000), color: '#b5a893' }], overlay: { name: '∫P dt (heater)', y: r.cumPin.map(e => e / 1000) }, cursorX: t / 60 } }];
+  },
+  checks(r) {
+    const wr = Math.max(...r.waterResidual.map(Math.abs)) / r.water0, er = Math.max(...r.energyResidual.map(Math.abs)) / Math.max(1, r.ledger.Pin);
+    return [[wr < 1e-9, 'Water: free + in grains + steam = initial (two control volumes + steam)', wr, 'relative'], [er < 1e-9, 'Energy: ∫P dt = Δ(pot) + Δ(grains) + losses + steam', er, 'relative'],
+      [null, `Grains represented by ${Math.round(r.Ng).toLocaleString()} identical grains (dry mass matches the rice)`, r.Ng, 'grains'], [null, 'All grains see the same water temperature: no stratification, no contact with the hot base (limitation)', null, '']];
+  },
+  equations: `
+    <div class="eqbox"><h4>CV A — the free water in the pot</h4><div class="eq">dM/dt = −Nṁ<sub>g</sub> − ṁ<sub>ev</sub></div>
+      <div class="eq">d/dt[(Mc<sub>w</sub> + C<sub>v</sub>)T] = P − UA(T − T<sub>amb</sub>) − N(Q̇<sub>g</sub> + ṁ<sub>g</sub>c<sub>w</sub>T) − ṁ<sub>ev</sub>(c<sub>w</sub>T + h<sub>fg</sub>)</div>
+      <p>Boiling cap T ≤ T<sub>b</sub>(p) as in Stage 1. When M reaches 0 the heat is switched off and the pot rests (lid on).</p></div>
+    <div class="eqbox"><h4>CV B — N identical grains</h4><p>Each grain is the Stage-5 model (L4) with T<sub>water</sub> = T(t). N = (dry rice mass)/(dry mass of one grain). Q̇<sub>g</sub> and ṁ<sub>g</sub> are the heat and water crossing one grain’s moving surface.</p>
+      <div class="eq">water: M + N m<sub>w,grain</sub> + M<sub>steam</sub> = const</div></div>
+    <div class="eqbox"><h4>Assumptions</h4><ul><li>Well-mixed water; every grain sees the same T (no bed stratification, no hot-base contact).</li><li>Grains fully immersed while free water remains; after that no water crosses their surface.</li><li>Lid: lower losses and sub-boiling evaporation (illustrative UA, k<sub>m</sub>).</li><li>Pressure cooker: water held until 1 bar gauge, then vented at the surplus rate.</li></ul></div>`,
+  defs: [['M', 'Free liquid water in the pot (CV A)', 'kg'], ['N', 'Number of representative grains', '–'], ['ṁ_g, Q̇_g', 'Water and heat entering one grain', 'kg/s; W'], ['ṁ_ev', 'Steam leaving the pot', 'kg/s'], ['water : rice', 'Mass of water added per mass of raw rice', '–']],
+  questions: ['Find the smallest water : rice ratio for which the core gelatinizes before the free water runs out (lid on, 300 W simmer).', 'Take the lid off and repeat. Where does the extra water go?', 'Compare “to cold water” and “when it boils”. Does it change the cooking time after the rice goes in?'],
+  record: (r, v) => [`${v.method}, ${v.rice} g rice, ratio ${v.ratio}, lid ${v.lid ? 'on' : 'off'}, ${v.Pboil}/${v.simmer ? v.Psim : v.Pboil} W, presoak ${v.presoak}`, `core ${fmtT(r.events.tCoreGel)}, dry ${fmtT(r.events.tDry)}, in rice ${((r.Mgrain[r.Mgrain.length - 1] - r.Mgrain[0]) * 1000).toFixed(0)} g, steam ${(r.Mevap[r.Mevap.length - 1] * 1000).toFixed(0)} g`]
+});
+
+/* ---------------- Stage 7: verdict ---------------- */
+STAGES.push({
+  key: 'verdict', icon: 'verdict', short: 'Verdict', brief: ['c', 'f'],
+  title: 'So how long does rice take to cook?',
+  intro: 'Run the same physics for many situations. The answer depends on grain size and shape, presoaking, the boiling point, the type of rice — and on what we choose to call “cooked”. A single thermal estimate misses by about a factor of a hundred.',
+  sceneTitle: 'Core-gelatinization time across conditions', tags: [['calc', 'all bars and markers']],
+  noPlay: true,
+  controls: [
+    { k: 'scen', label: 'Scenarios to compare', type: 'scenarios', v: P.SCENARIOS.map(s => s.id) },
+    { k: 'G', label: 'What counts as “core cooked”: G at centre ≥', unit: '–', min: 0.5, max: 0.99, step: 0.01, v: 0.9, hint: 'A definition, not physics — change it and watch every time move.' }
+  ],
+  presets: [['All scenarios', { scen: P.SCENARIOS.map(s => s.id), G: 0.9 }], ['Size only', { scen: ['long', 'base', 'short'] }], ['Temperature only', { scen: ['alt', 'base', 'cooker'] }], ['Soaking only', { scen: ['base', 'soak30', 'soak120'] }]],
+  compute(v) {
+    const res = P.SCENARIOS.filter(s => v.scen.includes(s.id)).map(sc => P.runScenario(sc, { params: { G_done: v.G } }));
+    res.forEach(r => { r.tCoreGel = P.crossTime(r.run.t, r.run.Gc, v.G); });
+    return { res, v, t: [0] };
+  },
+  scene(r) {
+    const th = PL.THEMES[theme()];
+    const svg = PL.barChart({ w: 760, theme: theme(), xLog: true, xMin: 1, xMax: 2e4, labelW: 300, rowH: Math.min(34, 300 / Math.max(1, r.res.length)), ticks: [1, 10, 60, 600, 3600, 2e4], tickFmt: v => v < 60 ? v + ' s' : v < 3600 ? (v / 60) + ' min' : (v / 3600).toFixed(1).replace('.0', '') + ' h', xLabel: 'time, log scale',
+      rows: r.res.map(x => ({ label: x.sc.name, value: x.tCoreGel, valueLabel: x.tCoreGel ? fmtT(x.tCoreGel) : 'not reached', color: th.series[1], markers: [{ x: x.naiveHeat, color: th.series[2] }, { x: x.naiveWater, color: th.series[0], shape: 'diamond' }] })),
+      legend: [{ label: 'model core time', color: th.series[1] }, { label: 'R²/α (thermal)', color: th.series[2], shape: 'tick' }, { label: 'R²/D (water)', color: th.series[0], shape: 'diamond' }] });
+    return svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
+  },
+  sceneViewBox: r => `0 0 760 ${18 + 58 + Math.min(34, 300 / Math.max(1, r.res.length)) * r.res.length}`,
+  metrics(r) {
+    const ts = r.res.map(x => x.tCoreGel).filter(x => x), mn = Math.min(...ts), mx = Math.max(...ts), th = r.res.map(x => x.naiveHeat);
+    return [['Shortest core time', fmtT(mn), '', true], ['Longest core time', fmtT(mx), '', true], ['Spread (longest ÷ shortest)', fmt(mx / mn, 3), '×'], ['Thermal estimates R²/α', `${fmt(Math.min(...th), 2)}–${fmt(Math.max(...th), 2)}`, 's'],
+      ['Thermal estimate is too short by', `${fmt(mn / Math.max(...th), 2)}–${fmt(mx / Math.min(...th), 2)}`, '×'], ['Criterion', `G_c ≥ ${r.v.G}`, '(a definition)'], ['Scenarios', String(r.res.length), ''], ['Model', 'L4 full', 'equivalent sphere unless stated']];
+  },
+  explain() {
+    return `<h3>Verdict</h3><p>The same physics gives a different cooking time in each situation. Every time is far longer than the heat-conduction estimate, and none matches a single water-diffusion estimate either. There is no universal cooking time, because:</p>
+      <ul><li><b>Water transport</b>, not heat, is the slow step (Stage 4).</li><li>The time grows with <b>size squared</b> and depends on the grain’s <b>shape</b>.</li>
+      <li>The water temperature is capped by the <b>boiling point</b> (altitude, pressure cooker), and temperature changes both how fast water diffuses and how fast starch gelatinizes.</li><li><b>Presoaking</b> changes the starting state; <b>rice type</b> changes the diffusivity (brown rice’s bran layer slows water entry).</li>
+      <li><b>“Cooked” is a definition.</b> Changing the criterion moves every time, and eating quality also needs enough total water (Stage 6).</li></ul>`;
+  },
+  predict: { q: 'Guess the ratio between the longest and shortest cooking times in this list.', unit: '×', answer: r => { const ts = r.res.map(x => x.tCoreGel).filter(x => x); return Math.max(...ts) / Math.min(...ts); } },
+  plots(r, t, v, th) {
+    return [{ id: 'p7', title: 'Centre gelatinization for every scenario', spec: { xLabel: 'time in hot water (min)', yLabel: 'G at centre', yMin: 0, yMax: 1.02, legend: 'right', series: r.res.map((x, j) => ({ name: x.sc.name.length > 34 ? x.sc.name.slice(0, 33) + '…' : x.sc.name, x: x.run.t.map(q => q / 60), y: x.run.Gc, color: PL.THEMES[theme()].series[j % 6], dash: j >= 6 ? '5 3' : null })), hlines: [{ y: r.v.G, label: 'criterion' }] }, table: true }];
+  },
+  checks(r) { return r.res.map(x => [Math.abs(x.run.final.waterResidual) / x.run.final.waterIn < 1e-9, `Water balance closes: ${x.sc.name}`, Math.abs(x.run.final.waterResidual) / x.run.final.waterIn, 'relative']); },
+  equations: `<div class="eqbox"><h4>How each bar is made</h4><p>The full model (L4) for one representative grain, from 25 °C, in water at the boiling point of the chosen place; presoak first if listed. Bars: time when G at the centre first reaches the chosen criterion. Red ticks: R²/α with α of the raw grain. Gold diamonds: R²/D with D of gelatinized starch at the water temperature.</p></div>
+    <div class="eqbox"><h4>What the comparison does not include</h4><ul><li>Grain-to-grain variation (real batches have a spread; the glass-plate test reports when 90 % of grains have no white core).</li><li>The pot (Stage 6): heating time, water availability and resting.</li><li>Texture/sensory doneness, leaching, cracks.</li></ul></div>`,
+  defs: [['t_core', 'Time when G at the centre reaches the criterion', 's'], ['R²/α', 'Thermal diffusion time scale', 's'], ['R²/D', 'Water diffusion time scale', 's']],
+  questions: ['Which single change (size, soaking, altitude, rice type) moves the cooking time the most?', 'Change the criterion from 0.9 to 0.6. Which conclusions survive?', 'Write one sentence for the report explaining why R²/α cannot be the cooking time.'],
+  record: (r) => [`criterion G ≥ ${r.v.G}, ${r.res.length} scenarios`, r.res.map(x => `${x.sc.id}: ${fmtT(x.tCoreGel)}`).join('; ')]
+});
+
+/* =====================================================================
+   APP
+   ===================================================================== */
+let cur = 0, vals = STAGES.map(s => Object.fromEntries(s.controls.map(c => [c.k, Array.isArray(c.v) ? c.v.slice() : c.v]))), result = null;
+let simT = 0, playing = false, lastFrame = 0, phase = 0, speedIdx = 2, tab = 'plots', plotSpecs = {}, computeTimer = null, needShow = true;
+const DUR = () => result && result.t ? result.t[result.t.length - 1] : 0;
+
+function buildJourney() {
+  $('journey').innerHTML = STAGES.map((s, i) => `<li class="${i === cur ? 'active' : ''} ${book.visited.includes(s.key) && i !== cur ? 'done' : ''}"><button data-i="${i}" ${i === cur ? 'aria-current="step"' : ''}><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[s.icon]}</svg><span class="num">${i + 1}</span></span><span class="lbl">${s.short}</span></button></li>`).join('');
+  $('journey').querySelectorAll('button').forEach(b => b.onclick = () => enter(+b.dataset.i));
+}
+function enter(i) {
+  cur = clamp(i, 0, STAGES.length - 1); const s = STAGES[cur];
+  result = null;
+  if (!book.visited.includes(s.key)) { book.visited.push(s.key); save(); }
+  try { history.replaceState(null, '', '#' + s.key); } catch (e) { }
+  buildJourney();
+  $('eyebrow').textContent = `Stage ${cur + 1} of ${STAGES.length}`;
+  $('stageTitle').textContent = s.title; $('stageIntro').textContent = s.intro;
+  renderLaws(s);
+  $('sceneTitle').textContent = s.sceneTitle;
+  $('sceneTags').innerHTML = s.tags.map(([k, txt]) => `<span class="tag ${k}">${k === 'calc' ? 'Calculated' : k === 'illus' ? 'Illustrative' : 'Observed'}</span> <span class="tagnote">${txt}</span>`).join(' ');
+  $('playbar').style.display = s.noPlay ? 'none' : '';
+  $('speed').innerHTML = (s.speeds || [1]).map((x, k) => `<option value="${k}">${s.logTime ? '×' + x + ' decades/10 s' : x < 1 ? '×' + x : '×' + x}</option>`).join('');
+  speedIdx = Math.min(2, (s.speeds || [1]).length - 1); $('speed').value = speedIdx;
+  $('prevBtn').disabled = cur === 0; $('nextBtn').disabled = cur === STAGES.length - 1;
+  $('footHint').textContent = cur < STAGES.length - 1 ? `Next: ${STAGES[cur + 1].short}` : 'Export your notebook for the report';
+  renderBench(); renderPredict(); renderTabs();
+  simT = 0; playing = false; needShow = true; result = null; setPlayIcon();
+  compute(true);
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+function renderBench() {
+  const s = STAGES[cur], v = vals[cur];
+  let h = `<h3>Lab bench</h3><p class="sub">Set the conditions. Everything recalculates instantly.</p>`;
+  if (s.presets) h += `<div class="presets">${s.presets.map((p, k) => `<button data-p="${k}">${esc(p[0])}</button>`).join('')}</div>`;
+  for (const c of s.controls) {
+    if (c.show && !c.show(v)) continue;
+    const id = 'c-' + c.k;
+    if (c.type === 'toggle') h += `<div class="ctl"><label class="switch"><input type="checkbox" id="${id}" data-k="${c.k}" ${v[c.k] ? 'checked' : ''}><span class="lab">${c.label}</span></label></div>`;
+    else if (c.type === 'select') h += `<div class="ctl"><label for="${id}"><span class="lab">${c.label}</span></label><select id="${id}" data-k="${c.k}">${c.options.map(([val, txt]) => `<option value="${val}" ${v[c.k] === val ? 'selected' : ''}>${esc(txt)}</option>`).join('')}</select></div>`;
+    else if (c.type === 'seg') h += `<div class="ctl"><span class="lab" style="font-size:13px">${c.label}</span><div class="seg" role="group" aria-label="${c.label}">${c.options.map(([val, txt]) => `<button data-k="${c.k}" data-v="${val}" aria-pressed="${v[c.k] === val}">${txt}</button>`).join('')}</div></div>`;
+    else if (c.type === 'ladder') h += `<div class="ctl"><span class="lab" style="font-size:13px">${c.label} — add one assumption at a time</span><div class="ladder">${[1, 2, 3, 4].map(L => `<button data-k="${c.k}" data-v="${L}" aria-pressed="${v[c.k] === L}" class="${L < v[c.k] ? 'below' : ''}"><b>L${L}</b><span>${esc(P.LEVELS[L].name.replace(/^L\d · /, ''))}</span></button>`).join('')}</div></div>`;
+    else if (c.type === 'scenarios') h += `<div class="ctl"><span class="lab" style="font-size:13px">${c.label}</span><div class="scen">${P.SCENARIOS.map(sc => `<label><input type="checkbox" data-scen="${sc.id}" ${v.scen.includes(sc.id) ? 'checked' : ''}> ${esc(sc.name)}</label>`).join('')}</div></div>`;
+    else h += `<div class="ctl"><label for="${id}"><span class="lab">${c.label}</span><span><input type="number" id="n-${c.k}" data-k="${c.k}" min="${c.min}" max="${c.max}" step="${c.step}" value="${v[c.k]}" aria-label="${c.label} value"> <span class="tagnote">${c.unit || ''}</span></span></label><input type="range" id="${id}" data-k="${c.k}" min="${c.min}" max="${c.max}" step="${c.step}" value="${v[c.k]}" aria-label="${c.label}">${c.hint ? `<div class="hint">${c.hint}</div>` : ''}</div>`;
+  }
+  $('bench').innerHTML = h;
+  const b = $('bench');
+  b.querySelectorAll('[data-p]').forEach(el => el.onclick = () => { Object.assign(vals[cur], s.presets[+el.dataset.p][1]); renderBench(); compute(); });
+  b.querySelectorAll('input[type=range]').forEach(el => el.oninput = () => { const k = el.dataset.k; vals[cur][k] = +el.value; const n = $('n-' + k); if (n) n.value = el.value; compute(); });
+  b.querySelectorAll('input[type=number]').forEach(el => el.onchange = () => { const c = s.controls.find(c => c.k === el.dataset.k); let x = clamp(+el.value, c.min, c.max); if (!isFinite(x)) return; vals[cur][c.k] = x; el.value = x; $('c-' + c.k).value = x; compute(); });
+  b.querySelectorAll('input[type=checkbox][data-k]').forEach(el => el.onchange = () => { vals[cur][el.dataset.k] = el.checked; renderBench(); compute(); });
+  b.querySelectorAll('select[data-k]').forEach(el => el.onchange = () => { vals[cur][el.dataset.k] = el.value; renderBench(); compute(); });
+  b.querySelectorAll('.seg button, .ladder button').forEach(el => el.onclick = () => { const raw = el.dataset.v; vals[cur][el.dataset.k] = isNaN(+raw) ? raw : +raw; if (el.dataset.k === 'method') applyMethod(); renderBench(); compute(); });
+  b.querySelectorAll('[data-scen]').forEach(el => el.onchange = () => { const set = new Set(vals[cur].scen); el.checked ? set.add(el.dataset.scen) : set.delete(el.dataset.scen); vals[cur].scen = P.SCENARIOS.map(x => x.id).filter(x => set.has(x)); if (!vals[cur].scen.length) { vals[cur].scen = ['base']; renderBench(); } compute(); });
+}
+function applyMethod() { const v = vals[cur]; if (v.method === 'excess') Object.assign(v, { ratio: Math.max(v.ratio, 5), lid: false, addAt: 'boil' }); else if (v.method === 'absorb') Object.assign(v, { ratio: Math.min(v.ratio, 3), lid: true, addAt: 'start' }); else Object.assign(v, { ratio: Math.min(v.ratio, 3), lid: true }); }
+function compute(immediate) {
+  clearTimeout(computeTimer);
+  const go = () => {
+    const s = STAGES[cur]; $('busy').classList.add('on');
+    setTimeout(() => {
+      if (s !== STAGES[cur]) return;                                         // stage changed while waiting
+      try { result = s.compute(vals[cur]); result.__key = s.key; } catch (e) { console.error(e); result = null; }
+      $('busy').classList.remove('on');
+      if (needShow && result) { simT = s.noPlay ? 0 : clamp(s.showAt ? s.showAt(result) : DUR(), 0, DUR()); needShow = false; }   // open at a telling moment
+      else simT = Math.min(simT, DUR());
+      renderMarks(); renderAll(); renderPredict(true);
+    }, 10);
+  };
+  if (immediate) go(); else computeTimer = setTimeout(go, 140);
+}
+function renderMarks() {
+  const s = STAGES[cur]; if (!result || !s.marks) { $('marks').innerHTML = ''; return; }
+  $('marks').innerHTML = s.marks(result).filter(Boolean).map(([l, tt]) => `<span style="left:${100 * toU(tt)}%">${esc(l)}</span>`).join('');
+}
+function toU(t) { const s = STAGES[cur], D = DUR(); if (!D) return 0; if (s.logTime) { const t0 = 0.02; return clamp(Math.log(Math.max(t, t0) / t0) / Math.log(D / t0), 0, 1); } return clamp(t / D, 0, 1); }
+function fromU(u) { const s = STAGES[cur], D = DUR(); if (s.logTime) { const t0 = 0.02; return u <= 0 ? 0 : t0 * Math.pow(D / t0, u); } return u * D; }
+function renderAll() {
+  if (!result) { $('scene').innerHTML = T(380, 200, 'Calculating…', { anchor: 'middle' }); return; }
+  const s = STAGES[cur], v = vals[cur];
+  $('scene').setAttribute('viewBox', s.sceneViewBox ? s.sceneViewBox(result) : '0 0 760 400');
+  $('scene').innerHTML = s.scene(result, simT, phase, v);
+  $('scrub').value = Math.round(1000 * toU(simT));
+  $('clock').textContent = s.noPlay ? '' : 't = ' + fmtT(simT);
+  $('readouts').innerHTML = s.metrics(result, simT, v).map(([k, val, u, hl]) => `<div class="tile ${hl ? 'hl' : ''}"><span class="k">${k}</span><span class="v">${val}</span><span class="u">${u || ''}</span></div>`).join('');
+  $('explain').innerHTML = s.explain(result, simT, v);
+  renderTabBody(true);
+}
+function renderLight() {                                    // during playback: scene + tiles (+ plot cursors, throttled)
+  const s = STAGES[cur], v = vals[cur];
+  $('scene').innerHTML = s.scene(result, simT, phase, v);
+  $('scrub').value = Math.round(1000 * toU(simT)); $('clock').textContent = 't = ' + fmtT(simT);
+  $('readouts').innerHTML = s.metrics(result, simT, v).map(([k, val, u, hl]) => `<div class="tile ${hl ? 'hl' : ''}"><span class="k">${k}</span><span class="v">${val}</span><span class="u">${u || ''}</span></div>`).join('');
+}
+/* ---------- prediction card ---------- */
+function renderPredict(afterCompute) {
+  const s = STAGES[cur], p = s.predict, el = $('predict'); if (!p) { el.style.display = 'none'; return; } el.style.display = '';
+  const saved = book.predictions[s.key];
+  let ans = null; try { ans = result && result.__key === s.key && p.answer ? p.answer(result) : null; } catch (e) { ans = null; }
+  if (saved && saved.locked) {
+    const diff = ans != null && isFinite(ans) ? (saved.value - ans) / ans * 100 : null;
+    el.innerHTML = `<div class="q"><b>Your prediction: ${fmt(saved.value, 3)} ${p.unit}</b><span>${esc(p.q)}</span></div><div class="res">Model (current conditions): <b>${ans != null && isFinite(ans) ? fmt(ans, 3) + ' ' + p.unit : '—'}</b>${diff != null ? ` · you were ${diff > 0 ? 'high' : 'low'} by ${Math.abs(diff).toFixed(0)} %` : ''}</div><button class="ghost" id="predReset">Predict again</button>`;
+    $('predReset').onclick = () => { delete book.predictions[s.key]; save(); renderPredict(); };
+  } else {
+    el.innerHTML = `<div class="q"><b>Predict first:</b> ${esc(p.q)}<span>${esc(p.hint || 'Write a number before you look at the result.')}</span></div><input type="number" step="any" id="predIn" placeholder="${p.unit}" aria-label="Your prediction"> <span class="tagnote">${p.unit}</span><button class="btn" id="predLock">Lock in</button>`;
+    $('predLock').onclick = () => { const x = +$('predIn').value; if (!isFinite(x) || $('predIn').value === '') return; book.predictions[s.key] = { value: x, locked: true, at: new Date().toISOString() }; save(); renderPredict(); };
+  }
+}
+/* ---------- tabs ---------- */
+const TABS = [['plots', 'Plots'], ['checks', 'Balances & checks'], ['eq', 'Model details & assumptions'], ['defs', 'Definitions & units'], ['notes', 'Questions, notes & trials']];
+function renderTabs() {
+  $('tablist').innerHTML = TABS.map(([k, l]) => `<button role="tab" data-t="${k}" aria-selected="${tab === k}">${l}</button>`).join('');
+  $('tablist').querySelectorAll('button').forEach(b => b.onclick = () => { tab = b.dataset.t; renderTabs(); renderTabBody(); });
+}
+function renderTabBody(soft) {
+  const s = STAGES[cur], v = vals[cur], el = $('tabpanel'); if (!result) return;
+  if (tab === 'plots') return renderPlots(soft);
+  if (soft && tab === 'notes') return;
+  if (tab === 'checks') {
+    const rows = s.checks(result, v);
+    el.innerHTML = `<p class="tagnote">Live checks for the current conditions. The full independent suite (analytical solutions, convergence, limits) is in <a href="../Code/checks.html">Code/checks.html</a>.</p><div class="checks">${rows.map(([ok, name, val, unit]) => `<div class="check"><span class="ic ${ok === null ? 'info' : ok ? 'ok' : 'no'}">${ok === null ? 'i' : ok ? '✓' : '!'}</span><span class="nm">${name}</span><span class="val">${val == null ? '' : fmt(val, 3)}<small>${unit}</small></span></div>`).join('')}</div>`;
+  } else if (tab === 'eq') el.innerHTML = `<div class="eqs">${s.equations}</div>`;
+  else if (tab === 'defs') el.innerHTML = `<table class="def"><thead><tr><th>Symbol</th><th>Meaning</th><th>Unit</th></tr></thead><tbody>${s.defs.map(d => `<tr><td>${esc(d[0])}</td><td>${esc(d[1])}</td><td>${esc(d[2])}</td></tr>`).join('')}</tbody></table><p class="tagnote" style="margin-top:10px">Parameters and their sources:</p><table class="def"><tbody>${Object.entries(P.PARAMS).map(([k, p]) => `<tr><td>${k}</td><td>${esc(p.src)}</td><td>${fmt(p.v, 3)} ${esc(p.unit)}</td></tr>`).join('')}</tbody></table>`;
+  else if (tab === 'notes') {
+    const trials = book.trials[s.key] || [];
+    el.innerHTML = `<div class="notesgrid"><div><div class="eyebrow">Investigate</div><ol class="qlist">${s.questions.map(q => `<li>${esc(q)}</li>`).join('')}</ol></div>
+      <div><label for="notes" style="font-weight:600;font-size:13.5px">Hypothesis, observations, conclusions</label><textarea id="notes" placeholder="What did you change? What happened? Which balance or scaling explains it?">${esc(book.notes[s.key] || '')}</textarea><div class="tagnote">Saved in this browser. Export the notebook to keep a copy.</div></div></div>
+      <div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn" id="recBtn">＋ Record this trial</button><button class="ghost" id="clrBtn">Clear trials</button><span class="tagnote">${trials.length} recorded</span></div>
+      ${trials.length ? `<table class="trials"><thead><tr><th>#</th><th>Conditions</th><th>Result</th><th>When</th></tr></thead><tbody>${trials.map((t, k) => `<tr><td>${k + 1}</td><td>${esc(t.c)}</td><td>${esc(t.r)}</td><td>${esc(t.at)}</td></tr>`).join('')}</tbody></table>` : ''}`;
+    $('notes').oninput = e => { book.notes[s.key] = e.target.value; save(); };
+    $('recBtn').onclick = () => { const [c, r] = s.record(result, v); (book.trials[s.key] = book.trials[s.key] || []).push({ c, r, at: new Date().toLocaleString() }); save(); renderTabBody(); };
+    $('clrBtn').onclick = () => { if ((book.trials[s.key] || []).length && confirm('Clear recorded trials for this stage? Notes stay.')) { book.trials[s.key] = []; save(); renderTabBody(); } };
+  }
+}
+function renderPlots(soft) {
+  const s = STAGES[cur], v = vals[cur], el = $('tabpanel'), thm = theme(), th = PL.THEMES[thm];
+  const list = s.plots(result, simT, v, th);
+  const build = (pl) => {
+    const spec = Object.assign({ id: pl.id, w: 640, h: 300, theme: thm }, pl.spec);
+    if (pl.stacked) return PL.stackedArea(spec);
+    return PL.linePlot(spec);
+  };
+  if (soft && el.querySelector('.plots') && el.dataset.stage === s.key) {           // update in place (keeps kitchen panel state)
+    for (const pl of list) { const w = el.querySelector(`[data-plot="${pl.id}"] .svgwrap`); if (w) w.innerHTML = build(pl); plotSpecs[pl.id] = pl; }
+    if (list.some(pl => !el.querySelector(`[data-plot="${pl.id}"]`)) || el.querySelectorAll('[data-plot]').length !== list.length) return renderPlots(false);
+    if (s.key === 'verdict') el.querySelector('#vtable').innerHTML = verdictTable();
+    return;
+  }
+  plotSpecs = {}; list.forEach(pl => plotSpecs[pl.id] = pl);
+  el.dataset.stage = s.key;
+  el.innerHTML = `<div class="plots">${list.map(pl => `<div class="plot" data-plot="${pl.id}"><div class="ph"><b>${esc(pl.title)}</b><button data-x="svg">SVG</button><button data-x="png">PNG</button><button data-x="csv">CSV</button></div><div class="svgwrap">${build(pl)}</div><div class="tip"></div></div>`).join('')}</div>` +
+    (s.key === 'verdict' ? `<div id="vtable">${verdictTable()}</div>` : '') + (s.kitchen ? kitchenPanel(s.kitchen) : '');
+  el.querySelectorAll('.plot').forEach(box => {
+    const id = box.dataset.plot;
+    box.querySelectorAll('[data-x]').forEach(b => b.onclick = () => exportPlot(id, b.dataset.x));
+    const wrap = box.querySelector('.svgwrap'), tip = box.querySelector('.tip');
+    wrap.onmousemove = e => hover(e, box, wrap, tip, id); wrap.onmouseleave = () => tip.classList.remove('on');
+  });
+  if (s.kitchen) wireKitchen(s.kitchen);
+}
+function hover(e, box, wrap, tip, id) {
+  const svg = wrap.querySelector('svg'); if (!svg) return; const meta = JSON.parse(svg.getAttribute('data-plot') || 'null'); if (!meta) return;
+  const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) * meta.W / r.width, sy = (e.clientY - r.top) * meta.H / r.height;
+  if (sx < meta.l || sx > meta.l + meta.pw || sy < meta.t || sy > meta.t + meta.ph) { tip.classList.remove('on'); return; }
+  const f = (sx - meta.l) / meta.pw, x = meta.xLog ? Math.pow(10, Math.log10(meta.xMin) + f * (Math.log10(meta.xMax) - Math.log10(meta.xMin))) : meta.xMin + f * (meta.xMax - meta.xMin);
+  const pl = plotSpecs[id]; if (!pl) return; const spec = pl.spec;
+  const series = pl.stacked ? spec.series.map(q => ({ name: q.name, x: spec.x, y: q.y })).concat(spec.overlay ? [{ name: spec.overlay.name, x: spec.x, y: spec.overlay.y }] : []) : spec.series;
+  const lines = series.filter(q => q.name && !q.points).map(q => { let best = 0, bd = Infinity; for (let i = 0; i < q.x.length; i++) { const d = Math.abs(q.x[i] - x); if (d < bd && q.y[i] != null) { bd = d; best = i; } } return `${esc(q.name)}: <b>${fmt(q.y[best], 4)}</b>`; });
+  tip.innerHTML = `x = ${fmt(x, 4)}<br>` + lines.join('<br>');
+  const br = box.getBoundingClientRect(); tip.style.left = Math.min(e.clientX - br.left + 14, br.width - 190) + 'px'; tip.style.top = (e.clientY - br.top + 10) + 'px'; tip.classList.add('on');
+}
+function exportPlot(id, kind) {
+  const pl = plotSpecs[id]; if (!pl) return; const s = STAGES[cur];
+  const spec = Object.assign({ id: pl.id + 'x', w: 760, h: 360, theme: 'light', title: pl.title }, pl.spec, { cursorX: null });
+  const svg = pl.stacked ? PL.stackedArea(spec) : PL.linePlot(spec);
+  const name = `${s.key}_${id}`;
+  if (kind === 'svg') download(name + '.svg', svg, 'image/svg+xml');
+  else if (kind === 'csv') {
+    const series = pl.stacked ? spec.series.map(q => ({ name: q.name, x: spec.x, y: q.y })) : spec.series;
+    const n = Math.max(...series.map(q => q.x.length)); const head = series.flatMap(q => [`x_${q.name}`, `y_${q.name}`]).map(h => '"' + String(h).replace(/"/g, "'") + '"').join(',');
+    const rows = []; for (let i = 0; i < n; i++) rows.push(series.flatMap(q => [q.x[i] ?? '', q.y[i] ?? '']).join(','));
+    download(name + '.csv', `# ${pl.title} — exported from Rice on the Boil (calculated unless named observed)\n${head}\n${rows.join('\n')}`, 'text/csv');
+  } else {
+    const img = new Image(); img.onload = () => { const c = document.createElement('canvas'); c.width = 760 * 2; c.height = 360 * 2; const g = c.getContext('2d'); g.scale(2, 2); g.drawImage(img, 0, 0, 760, 360); c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+}
+function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+function verdictTable() {
+  if (!result || !result.res) return '';
+  return `<table class="verdict-table"><thead><tr><th>Scenario</th><th>R (mm)</th><th>water T (°C)</th><th>presoak</th><th>core time</th><th>R²/α</th><th>R²/D</th><th>model ÷ R²/α</th></tr></thead><tbody>${result.res.map(x => `<tr><td>${esc(x.sc.name)}</td><td>${(x.R * 1e3).toFixed(2)}</td><td>${x.TC.toFixed(1)}</td><td>${x.sc.presoak ? x.sc.presoak + ' min' : '—'}</td><td><b>${fmtT(x.tCoreGel)}</b></td><td>${fmtT(x.naiveHeat)}</td><td>${fmtT(x.naiveWater)}</td><td>${x.tCoreGel ? Math.round(x.tCoreGel / x.naiveHeat) + '×' : '—'}</td></tr>`).join('')}</tbody></table>`;
+}
+/* ---------- optional kitchen panels (observed data) ---------- */
+function kitchenPanel(kind) {
+  if (kind === 'soak') {
+    const k = book.kitchen.soak;
+    return `<details class="kitchen" id="kpanel"><summary>Optional · Your soaking measurements (observed data)</summary>
+      <ol><li>Weigh about 20 g of raw rice (m₀). Note the packet or oven-dry moisture (default X₀ = 0.14 ≈ 12 % wb) and the water temperature.</li><li>Soak in plenty of water. At 5, 10, 15, 20, 30, 45, 60, 90, 120 min: drain, blot gently with paper towel for a fixed 30 s, weigh (m), return to the water.</li><li>Enter the readings below. Dry-basis moisture X = (m/m₀)(1 + X₀) − 1 appears in the uptake plot as green squares. Repeat 2–3 times; blotting is the main error source.</li></ol>
+      <div class="kgrid"><label>m₀ (g)<input id="k-m0" type="number" step="any" value="${k.m0}"></label><label>X₀ (kg/kg)<input id="k-X0" type="number" step="any" value="${k.X0}"></label><label>Water T (°C)<input id="k-T" type="number" step="any" value="${k.T}"></label><button class="ghost" id="k-add">＋ Row</button><button class="ghost" id="k-fit">Fit D to my data</button><button class="ghost" id="k-clear">Clear</button></div>
+      <table class="ktable"><thead><tr><th>time (min)</th><th>mass m (g)</th><th>X (calc.)</th></tr></thead><tbody id="k-rows">${(k.rows || []).map((r, i) => `<tr><td><input type="number" step="any" data-i="${i}" data-f="t" value="${r.t ?? ''}"></td><td><input type="number" step="any" data-i="${i}" data-f="m" value="${r.m ?? ''}"></td><td>${isFinite(r.m) && r.m > 0 ? P.moistureFromMass(r.m, k.m0, k.X0).toFixed(3) : ''}</td></tr>`).join('')}</tbody></table><div id="k-out" class="tagnote"></div></details>`;
+  }
+  const g = book.kitchen.glass;
+  return `<details class="kitchen" id="kpanel"><summary>Optional · Glass-plate cooking observations (observed data)</summary>
+    <ol><li>Bring plenty of water to a rolling boil; add 10 g of rice (soaked or unsoaked; keep a record).</li><li>Every 2 min from 6 min on, take 10 grains, press each between two glass plates. Count grains that still show an opaque white core (ISO 14864 glass-plate method).</li><li>Enter time and % with a white core. The observed points appear on the time plot as 1 − fraction; compare the time when ≤ 10 % show a core with the model’s core-gelatinization time.</li></ol>
+    <div class="kgrid"><button class="ghost" id="g-add">＋ Row</button><button class="ghost" id="g-clear">Clear</button></div>
+    <table class="ktable"><thead><tr><th>time (min)</th><th>% grains with white core</th></tr></thead><tbody>${(g.rows || []).map((r, i) => `<tr><td><input type="number" step="any" data-gi="${i}" data-f="t" value="${r.t ?? ''}"></td><td><input type="number" step="any" data-gi="${i}" data-f="p" value="${r.p ?? ''}"></td></tr>`).join('')}</tbody></table><div id="g-out" class="tagnote"></div></details>`;
+}
+function wireKitchen(kind) {
+  const open = sessionStorage && (() => { try { return sessionStorage.getItem('kopen') === '1'; } catch (e) { return false; } })();
+  const det = $('kpanel'); if (open) det.open = true; det.ontoggle = () => { try { sessionStorage.setItem('kopen', det.open ? '1' : '0'); } catch (e) { } };
+  const refresh = () => { save(); renderPlots(false); };
+  if (kind === 'soak') {
+    const k = book.kitchen.soak;
+    ['m0', 'X0', 'T'].forEach(f => $('k-' + f).onchange = e => { k[f] = +e.target.value; refresh(); });
+    $('k-add').onclick = () => { k.rows.push({ t: NaN, m: NaN }); refresh(); };
+    $('k-clear').onclick = () => { if (confirm('Clear your soaking data?')) { k.rows = []; refresh(); } };
+    det.querySelectorAll('[data-i]').forEach(inp => inp.onchange = () => { k.rows[+inp.dataset.i][inp.dataset.f] = inp.value === '' ? NaN : +inp.value; refresh(); });
+    $('k-fit').onclick = () => {
+      const pts = k.rows.filter(r => isFinite(r.t) && isFinite(r.m) && r.m > 0).map(r => ({ t: r.t * 60, X: P.moistureFromMass(r.m, k.m0, k.X0) }));
+      const fit = P.fitSoaking(pts, result.R0 || result.R, k.X0);
+      $('k-out').innerHTML = fit ? `Best fit (rigid sphere, constant D, R = ${((result.R0 || result.R) * 1e3).toFixed(2)} mm): <b>D = ${fmt(fit.D, 3)} m²/s</b>, plateau X = ${fit.Xeq.toFixed(3)} (rms ${fmt(fit.rms, 2)}). Model D(${k.T} °C) = ${fmt(P.diffusivity(k.T, PD, P.LEVELS[4], 0), 3)} m²/s; literature for white rice ≈ 10⁻¹¹–10⁻¹⁰ m²/s. Record this in your notes.` : 'Enter at least two readings.';
+    };
+  } else {
+    const g = book.kitchen.glass;
+    $('g-add').onclick = () => { g.rows.push({ t: NaN, p: NaN }); refresh(); };
+    $('g-clear').onclick = () => { if (confirm('Clear your glass-plate data?')) { g.rows = []; refresh(); } };
+    det.querySelectorAll('[data-gi]').forEach(inp => inp.onchange = () => { g.rows[+inp.dataset.gi][inp.dataset.f] = inp.value === '' ? NaN : +inp.value; refresh(); });
+    const pts = g.rows.filter(r => isFinite(r.t) && isFinite(r.p)).sort((a, b) => a.t - b.t);
+    const t10 = pts.length > 1 ? P.crossTime(pts.map(p => p.t), pts.map(p => p.p), 10) : null;
+    $('g-out').innerHTML = t10 != null ? `Observed: ≤ 10 % white cores at ≈ <b>${t10.toFixed(1)} min</b>. Model core-gelatinization time: <b>${fmtT(result.events.tCoreGel)}</b> for the current conditions.` : 'Enter at least two readings that bracket 10 %.';
+  }
+}
+/* ---------- playback ---------- */
+function setPlayIcon() { $('playBtn').innerHTML = playing ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>' : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>'; $('playBtn').setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+$('playBtn').onclick = () => { if (!result) return; if (!playing && simT >= DUR() - 1e-9) simT = 0; playing = !playing; lastFrame = performance.now(); setPlayIcon(); };
+$('restartBtn').onclick = () => { simT = 0; playing = false; setPlayIcon(); renderAll(); };
+$('scrub').oninput = () => { if (!result) return; simT = fromU(+$('scrub').value / 1000); playing = false; setPlayIcon(); renderLight(); scheduleCursor(); };
+$('speed').onchange = () => { speedIdx = +$('speed').value; };
+let cursorTimer = null; function scheduleCursor() { if (cursorTimer) return; cursorTimer = setTimeout(() => { cursorTimer = null; if (!result || result.__key !== STAGES[cur].key) return; if (tab === 'plots') renderPlots(true); else renderTabBody(true); $('explain').innerHTML = STAGES[cur].explain(result, simT, vals[cur]); }, 120); }
+let lastPlot = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - lastFrame) / 1000); lastFrame = now; phase += dt;
+  const s = STAGES[cur];
+  if (result && result.__key === s.key && !s.noPlay) {
+    if (playing) {
+      const sp = (s.speeds || [1])[speedIdx];
+      if (s.logTime) { const u = toU(simT) + dt * sp / 10; simT = fromU(Math.min(1, Math.max(u, 0.0001))); if (u >= 1) { playing = false; setPlayIcon(); } }
+      else { simT += dt * sp; if (simT >= DUR()) { simT = DUR(); playing = false; setPlayIcon(); } }
+      renderLight();
+      if (now - lastPlot > 400) { lastPlot = now; scheduleCursor(); }
+    } else if (now - lastPlot > 60) { lastPlot = now; $('scene').innerHTML = s.scene(result, simT, phase, vals[cur]); }   // keep flames/bubbles alive
+  }
+  requestAnimationFrame(frame);
+}
+/* ---------- notebook, theme, navigation ---------- */
+$('nbBtn').onclick = () => {
+  let txt = `RICE ON THE BOIL — investigation notebook\nMS2280 Project 19 · exported ${new Date().toLocaleString()}\n`;
+  for (const s of STAGES) {
+    txt += `\n${'='.repeat(64)}\nStage ${STAGES.indexOf(s) + 1}: ${s.short} — ${s.title}\n`;
+    const pr = book.predictions[s.key]; if (pr) txt += `Prediction: ${pr.value} ${s.predict ? s.predict.unit : ''} (${s.predict ? s.predict.q : ''})\n`;
+    txt += `Notes:\n${book.notes[s.key] || '(none)'}\nTrials:\n${(book.trials[s.key] || []).map((t, k) => `  ${k + 1}. ${t.c}\n     → ${t.r}  [${t.at}]`).join('\n') || '  (none)'}\n`;
+  }
+  const k = book.kitchen.soak; if (k.rows.length) txt += `\nKitchen soaking data (OBSERVED): m0 = ${k.m0} g, X0 = ${k.X0}, water ${k.T} °C\n` + k.rows.map(r => `  t = ${r.t} min, m = ${r.m} g, X = ${isFinite(r.m) ? P.moistureFromMass(r.m, k.m0, k.X0).toFixed(4) : ''}`).join('\n') + '\n';
+  const g = book.kitchen.glass; if (g.rows.length) txt += `\nGlass-plate observations (OBSERVED):\n` + g.rows.map(r => `  t = ${r.t} min, white core ${r.p} %`).join('\n') + '\n';
+  $('nbText').value = txt; const a = $('nbSave'); if (a.dataset.u) URL.revokeObjectURL(a.dataset.u); a.href = a.dataset.u = URL.createObjectURL(new Blob([txt], { type: 'text/plain;charset=utf-8' }));
+  $('nbDialog').showModal();
+};
+$('nbDialog').addEventListener('click', e => { if (e.target === $('nbDialog')) $('nbDialog').close(); });
+$('themeBtn').onclick = () => { const t = theme() === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = t; try { localStorage.setItem(STORE + '-theme', t); } catch (e) { } renderAll(); };
+try { const t = localStorage.getItem(STORE + '-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) { }
+{ const qt = new URLSearchParams(location.search).get('theme'); if (qt === 'light' || qt === 'dark') document.documentElement.dataset.theme = qt; }
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => renderAll());
+$('prevBtn').onclick = () => enter(cur - 1); $('nextBtn').onclick = () => enter(cur + 1);
+document.addEventListener('keydown', e => { if (e.target.closest('input,textarea,select')) return; if (e.key === ' ' && !STAGES[cur].noPlay) { e.preventDefault(); $('playBtn').click(); } });
+const startKey = (location.hash || '').slice(1), si = STAGES.findIndex(s => s.key === startKey);
+enter(si >= 0 ? si : 0);
+requestAnimationFrame(t => { lastFrame = t; frame(t); });
+</script>
+</body>
+</html>

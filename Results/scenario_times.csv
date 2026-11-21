@@ -1,0 +1,10 @@
+scenario,R_eq_mm,geometry,water_T_C,presoak_min,t_core_gel_min,t_centre_within_1K_s,R2_over_alpha_s,R2_over_D_min,Xmean_end
+"Medium grain · unsoaked · 100 °C (sea level)",1.163076,sphere,99.99683,0,9.963654,9.928465,11.79264,69.84825,2.533744
+"Presoaked 30 min at 25 °C",1.163076,sphere,99.99683,30,9.193627,9.947794,11.79264,69.84825,2.536149
+"Presoaked 2 h at 25 °C",1.163076,sphere,99.99683,120,7.531166,9.978995,11.79264,69.84825,2.539691
+"Long slender grain",1.055738,sphere,99.99683,0,8.41151,9.890367,9.71644,57.55085,2.567492
+"Short bold grain",1.368642,sphere,99.99683,0,13.29135,14.51617,16.32955,96.72059,2.43259
+"Open pot at 3000 m (water boils ≈ 90 °C)",1.163076,sphere,90.02951,0,14.78453,9.907796,11.79264,93.11484,2.446887
+"Pressure cooker, 1 bar gauge (≈ 120 °C)",1.163076,sphere,120.5359,0,5.000806,9.964713,11.79264,40.43847,2.594132
+"Brown rice (bran layer, lower D)",1.163076,sphere,99.99683,0,16.15639,9.928363,11.79264,120.428,2.330845
+"Shape check: same grain as a long cylinder",0.7753841,cylinder,99.99683,0,7.117791,9.888253,5.241172,31.04366,2.501271
