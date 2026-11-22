@@ -1,6 +1,2 @@
 .DS_Store
-*.zip
-# course material (not ours to redistribute)
-Conservation_and_Transport_Equations.pdf
-Welty_Chapters_5_to_9_Concepts_and_Worked_Examples.pdf
-MS2280_Project_Instructions.pdf
+*.swp

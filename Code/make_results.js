@@ -1,163 +1,247 @@
-/* =====================================================================
-   Rice on the Boil — regenerate every figure (SVG) and table (CSV) in Results/.
-   Usage (macOS, no installs):   sh Code/make_results.sh
-   which runs:  jsc Model/physics.js Model/plots.js Code/checks.js Code/make_results.js
-   and splits the printed bundle (@@FILE markers) into files.
-   The same figures can be exported one by one from the interactive page.
-   ===================================================================== */
+/* =============================================================================
+   Rice on the Boil — regenerate Results/ (figures fig01…fig09 + CSV tables)
+   Run:  sh Code/make_results.sh
+   (= jsc Model/physics.js Model/plots.js Code/checks.js Code/make_results.js -- --quiet,
+      output split on "@@FILE name" markers by awk)
+   ============================================================================= */
 (function (root) {
-'use strict';
-const P = root.RicePhysics, PL = root.RicePlots, CK = root.RiceChecks;
-const files = {};
-const csv = (header, rows) => [header.join(',')].concat(rows.map(r => r.map(v => v == null ? '' : (typeof v === 'number' ? +v.toPrecision(7) : v)).join(','))).join('\n');
-const pd = P.defaults();
-const C = PL.THEMES.light.series;
-const Rmed = P.equivalentSize(P.GRAIN_PRESETS.medium, 'sphere');
+  'use strict';
+  var P = root.RicePhysics, PL = root.RicePlots, CK = root.RiceChecks;
+  var TH = 'light', th = PL.THEMES.light, S = th.series;
+  function emit(name, text) { root.print('@@FILE ' + name); root.print(String(text).replace(/\n$/, '')); }
+  function log(msg) { root.print('@@LOG ' + msg); }
+  function csv(name, header, rows) { emit(name, CK.toCSV(header, rows)); }
+  function col(a, k) { return a.map(function (r) { return r[k]; }); }
+  var min = function (t) { return t / 60; };
+  var key = [];   // key_results.csv rows
+  function K(name, value, unit, note) { key.push([name, value, unit, note || '']); }
 
-/* ---- 1. Pot heating: temperature cap and boiling point ---- */
-{
-  const runs = [
-    { name: 'Sea level, lid on', cfg: { lid: true } },
-    { name: 'Sea level, lid off', cfg: { lid: false } },
-    { name: '3000 m, lid on', cfg: { lid: true, altitude: 3000 } },
-    { name: 'Pressure cooker (1 bar gauge)', cfg: { lid: true, cookerGauge: 1e5 } }
-  ].map(r => ({ ...r, out: P.runPot(Object.assign({ water: 1.0, Pboil: 1500, tEnd: 1200, nOut: 240 }, r.cfg)) }));
-  files['fig01_pot_temperature.svg'] = PL.linePlot({ id: 'f1', w: 760, h: 340, title: 'Fig. 1 · Water temperature in a pot: boiling caps the temperature (calculated)',
-    xLabel: 'time (min)', yLabel: 'pot water temperature (°C)', legend: 'right',
-    series: runs.map((r, k) => ({ name: r.name, x: r.out.t.map(t => t / 60), y: r.out.Tp, color: C[k], dash: k === 1 ? '6 4' : null })),
-    hlines: runs.filter((r, k) => k !== 1).map((r, k) => ({ y: r.out.Tb, label: `T_b = ${r.out.Tb.toFixed(1)} °C`, color: C[[0, 2, 3][k]] })),
-    note: '1.0 kg water, 0.54 kJ/K vessel, 1.5 kW delivered to the pot. Temperature stops rising at T_b(p); extra heat boils water away.' });
-  const rows = []; runs[0].out.t.forEach((t, i) => rows.push([t, ...runs.map(r => r.out.Tp[i]), ...runs.map(r => r.out.Mevap[i] * 1000)]));
-  files['pot_temperature.csv'] = csv(['t_s', ...runs.map(r => 'T_' + r.name.replace(/[ ,()]/g, '_')), ...runs.map(r => 'evaporated_g_' + r.name.replace(/[ ,()]/g, '_'))], rows);
-  const r0 = runs[1].out, sp = P.potEnergySplit(r0);
-  files['pot_energy_split.csv'] = csv(['quantity_J', 'value'], [['heater energy delivered', sp.Pin], ['sensible (stored) increase', sp.sensible], ['latent heat of evaporated water', sp.latent], ['enthalpy of liquid carried by steam', sp.steamEnthalpy], ['wall and lid losses', sp.losses], ['residual', sp.Pin - sp.sensible - sp.latent - sp.steamEnthalpy - sp.losses]]);
-}
-
-/* ---- 2. Heat conduction into one grain ---- */
-{
-  const r = P.runGrain({ grain: { geom: 'sphere', R0: Rmed, N: 60, level: 4, T0: 25, water: false }, bath: { TC: 100, h: pd.h }, tEnd: 30, nOut: 300, dtMax: 0.05 });
-  const times = [0.5, 1, 2, 4, 8, 16];
-  const idx = t => r.t.findIndex(v => v >= t - 1e-9);
-  const k = P.cellK(pd.X0, pd), alpha = P.grainAlpha(pd.X0, pd), Bi = pd.h * Rmed / k;
-  const series = times.map((t, j) => { const pr = r.profiles[idx(t)]; return { name: `t = ${t} s`, x: pr.r.map(v => v / pr.R), y: pr.T, color: PL.heatColor(25 + 75 * (j + 1) / (times.length + 0.5), 25, 100), width: 2.2 }; });
-  times.forEach((t, j) => { const xs = [0, 0.2, 0.4, 0.6, 0.8, 0.95]; series.push({ name: j === 0 ? 'series solution' : null, x: xs, y: xs.map(x => 100 - 75 * P.sphereConvective(Bi, x, alpha * t / (Rmed * Rmed))), points: true, hollow: true, color: '#2b2622', r: 3 }); });
-  files['fig02_grain_temperature_profiles.svg'] = PL.linePlot({ id: 'f2', w: 720, h: 340, title: `Fig. 2 · Temperature inside a grain dropped into boiling water (Bi = ${Bi.toFixed(1)}, calculated)`,
-    xLabel: 'radial position r/R', yLabel: 'temperature (°C)', xMin: 0, xMax: 1, yMin: 20, yMax: 102, legend: 'right', series,
-    note: `Equivalent sphere R = ${(Rmed * 1e3).toFixed(2)} mm, α = ${alpha.toExponential(2)} m²/s, h = ${pd.h} W/m²K. Circles: Carslaw & Jaeger series (independent check).` });
-  const lumped = r.t.map(t => 100 - 75 * Math.exp(-3 * Bi * alpha * t / (Rmed * Rmed)));
-  files['fig02b_centre_vs_lumped.svg'] = PL.linePlot({ id: 'f2b', w: 720, h: 320, title: 'Fig. 2b · Grain centre vs surface vs a uniform-temperature (lumped) model',
-    xLabel: 'time (s)', yLabel: 'temperature (°C)', xMin: 0, xMax: 30, legend: 'top', series: [
-      { name: 'centre (spatial model)', x: r.t, y: r.Tc, color: C[2] }, { name: 'surface (spatial model)', x: r.t, y: r.Ts, color: C[0] },
-      { name: 'lumped model (wrong when Bi > 0.1)', x: r.t, y: lumped, color: C[5], dash: '6 4' }],
-    vlines: [{ x: r.events.tCentreWithin1K, label: `centre within 1 K: ${r.events.tCentreWithin1K.toFixed(1)} s`, color: C[2] }, { x: Rmed * Rmed / alpha, label: `R²/α = ${(Rmed * Rmed / alpha).toFixed(1)} s`, color: C[5], row: 1 }] });
-  files['grain_heating.csv'] = csv(['t_s', 'T_centre_C', 'T_surface_C', 'T_lumped_C'], r.t.map((t, i) => [t, r.Tc[i], r.Ts[i], lumped[i]]));
-}
-
-/* ---- 3. Soaking: water uptake, size and scaling ---- */
-{
-  const sizes = ['long', 'medium', 'short'].map((k, j) => { const R = P.equivalentSize(P.GRAIN_PRESETS[k], 'sphere'); return { k, R, run: P.runGrain({ grain: { geom: 'sphere', R0: R, N: 60, level: 4, T0: 25 }, bath: { TC: 25 }, tEnd: 4 * 3600, nOut: 240, dtMax: 5, keepProfiles: j === 1 }) }; });
-  const D25 = P.diffusivity(25, pd, P.LEVELS[4], 0);
-  files['fig03_soaking_uptake.svg'] = PL.linePlot({ id: 'f3', w: 720, h: 330, title: 'Fig. 3 · Soaking at 25 °C: mean moisture of the grain (calculated)', xLabel: 'soaking time (min)', yLabel: '⟨X⟩ (kg water / kg dry solid)', xMin: 0, xMax: 240, legend: 'top',
-    series: sizes.map((s, j) => ({ name: `${P.GRAIN_PRESETS[s.k].name} (R = ${(s.R * 1e3).toFixed(2)} mm)`, x: s.run.t.map(t => t / 60), y: s.run.Xmean, color: C[j] })),
-    yMin: 0.12, yMax: 0.44, hlines: [{ y: pd.Xnat, label: 'native soaking capacity X_nat', color: C[5] }], note: `D(25 °C) = ${D25.toExponential(2)} m²/s from Briffaz et al. + Bello et al. activation energy. Swelling and D(T) included (L4).` });
-  files['fig03b_soaking_scaled.svg'] = PL.linePlot({ id: 'f3b', w: 720, h: 330, title: 'Fig. 3b · The same curves against Fo = D t / R²: grain size enters through R² (scaling check)', xLabel: 'Fo = D t / R₀²', yLabel: '(⟨X⟩ − X₀)/(X_nat − X₀)', xMin: 0, xMax: 0.6, yMin: 0, yMax: 1.02, legend: 'top',
-    series: sizes.map((s, j) => ({ name: P.GRAIN_PRESETS[s.k].name, x: s.run.t.map(t => D25 * t / (s.R * s.R)), y: s.run.Xmean.map(x => (x - pd.X0) / (pd.Xnat - pd.X0)), color: C[j], width: 2.5, opacity: 0.8 }))
-      .concat([{ name: 'Crank series, rigid sphere, constant D', x: Array.from({ length: 121 }, (_, i) => 0.005 * i), y: Array.from({ length: 121 }, (_, i) => P.uptakeFraction('sphere', 0.005 * i)), color: '#2b2622', dash: '5 4', width: 1.5 }]),
-    note: 'Curves collapse: time to soak scales with R². Small offset from the series: swelling (moving boundary) and D varying with moisture through the shell volume.' });
-  const pr = sizes[1].run.profiles, ts = [0, 5, 15, 30, 60, 120, 240];
-  files['fig03c_soaking_profiles.svg'] = PL.linePlot({ id: 'f3c', w: 720, h: 330, title: 'Fig. 3c · Moisture profiles during soaking (medium grain, 25 °C)', xLabel: 'radius r (mm) — grain swells, so the end point moves', yLabel: 'X (kg/kg dry basis)', yMin: 0.1, yMax: 0.42, legend: 'right',
-    series: ts.map((m, j) => { const i = sizes[1].run.t.findIndex(t => t >= m * 60 - 1e-6); const p = pr[i]; return { name: `${m} min`, x: p.r.map(v => v * 1e3).concat(m ? [p.R * 1e3] : []), y: p.X.concat(m ? [pd.Xnat] : []), color: PL.lerpColor(['#d9a441', '#5aa5bd', '#1d4677'], j / (ts.length - 1)), width: 2.2 }; }),
-    note: 'Calculated (L4, 25 °C). The surface sits at X_nat at once; the front moves inward and the radius grows by ≈ 9 %.' });
-  files['soaking_uptake.csv'] = csv(['t_min', ...sizes.map(s => 'Xmean_' + s.k), ...sizes.map(s => 'R_mm_' + s.k)], sizes[0].run.t.map((t, i) => [t / 60, ...sizes.map(s => s.run.Xmean[i]), ...sizes.map(s => s.run.R[i] * 1e3)]));
-}
-
-/* ---- 4. The race: heat vs water ---- */
-{
-  const heat = P.runGrain({ grain: { geom: 'sphere', R0: Rmed, N: 60, level: 4, T0: 25, water: false }, bath: { TC: 100 }, tEnd: 3600, nOut: 300, logOut: true, logStart: 0.02, dtMax: 1 });
-  const wat = P.runGrain({ grain: { geom: 'sphere', R0: Rmed, N: 60, level: 2, T0: 100 }, bath: { TC: 100 }, tEnd: 3600, nOut: 300, logOut: true, logStart: 0.02, dtMax: 1 });
-  const alpha = P.grainAlpha(pd.X0, pd), Dw = P.diffusivity(100, pd, P.LEVELS[4], 1);
-  files['fig04_heat_vs_water.svg'] = PL.linePlot({ id: 'f4', w: 720, h: 340, title: `Fig. 4 · The race to the centre: heat vs water (Le = α/D ≈ ${Math.round(alpha / Dw)})`, xLabel: 'time (s), log scale', yLabel: 'fraction of the way to the surface value',
-    xLog: true, xMin: 0.05, xMax: 1e4, yMin: 0, yMax: 1.02, legend: 'top', series: [
-      { name: 'centre temperature', x: heat.t, y: heat.Tc.map(T => (T - 25) / 75), color: C[2], width: 2.5 },
-      { name: 'centre moisture (L2: starch-controlled capacity)', x: wat.t, y: wat.Xc.map(x => (x - pd.X0) / (pd.Xgel - pd.X0)), color: C[1], width: 2.5 }],
-    vlines: [{ x: Rmed * Rmed / alpha, label: `R²/α = ${(Rmed * Rmed / alpha).toFixed(0)} s`, color: C[2] }, { x: Rmed * Rmed / Dw, label: `R²/D = ${(Rmed * Rmed / Dw / 60).toFixed(0)} min`, color: C[1] }],
-    note: 'Same grain, same boiling water: heat arrives in seconds, water needs many minutes. R²/α cannot be the cooking time.' });
-  files['race.csv'] = csv(['t_s', 'theta_centre_heat', 't_s_water', 'phi_centre_water'], heat.t.map((t, i) => [t, (heat.Tc[i] - 25) / 75, wat.t[i], (wat.Xc[i] - pd.X0) / (pd.Xgel - pd.X0)]));
-}
-
-/* ---- 5. Cooking one grain: gelatinization, swelling and the model ladder ---- */
-{
-  const r = P.runGrain({ grain: { geom: 'sphere', R0: Rmed, N: 60, level: 4, T0: 25 }, bath: { TC: 100 }, tEnd: 1800, nOut: 360, dtMax: 1 });
-  const ts = [1, 3, 5, 7, 9, 12, 20];
-  const at = m => r.t.findIndex(t => t >= m * 60 - 1e-6);
-  const pcol = j => PL.lerpColor(['#d9a441', '#2e75a8', '#1d4677'], j / (ts.length - 1));
-  files['fig05_cooking_profiles.svg'] = PL.linePlot({ id: 'f5', w: 720, h: 340, title: 'Fig. 5 · Moisture inside a grain cooking in boiling water (calculated, L4)', xLabel: 'radius r (mm) — the end of each curve is the moving surface', yLabel: 'X (kg water / kg dry solid)', legend: 'right',
-    series: ts.map((m, j) => { const p = r.profiles[at(m)]; return { name: `${m} min`, x: p.r.map(v => v * 1e3), y: p.X, color: pcol(j), width: 2.2 }; }),
-    vlines: [{ x: Rmed * 1e3, label: 'original surface R₀', color: '#776b5f' }],
-    note: `Medium grain, 100 °C. R grows to ${(r.final.R / Rmed).toFixed(2)} R₀ as shells take up water (volume additivity).` });
-  files['fig05d_gelatinization_profiles.svg'] = PL.linePlot({ id: 'f5d', w: 720, h: 320, title: 'Fig. 5d · Degree of gelatinization G inside the grain: a front moves inward', xLabel: 'radius r (mm)', yLabel: 'G (0 = native, 1 = gelatinized)', yMin: 0, yMax: 1.02, legend: 'right',
-    series: ts.map((m, j) => { const p = r.profiles[at(m)]; return { name: `${m} min`, x: p.r.map(v => v * 1e3), y: p.G, color: pcol(j), width: 2.2 }; }),
-    hlines: [{ y: pd.G_done, label: 'criterion G = 0.9' }],
-    note: `Core gelatinized (G at centre ≥ 0.9) at ${(r.events.tCoreGel / 60).toFixed(1)} min. Gelatinization needs T > ${pd.T_on} °C and X above ≈ ${pd.X_lo}–${pd.X_hi}.` });
-  // cross-section strip
-  let inner = ''; const snaps = [0, 2, 4, 6, 8, 10, 14];
-  snaps.forEach((m, j) => {
-    const p = r.profiles[at(m)], cx = 70 + j * 100, cy = 120, scale = 26 / Rmed;
-    const rings = PL.profileRings(p, (q, i) => PL.moistColor(q.X[i]), (q, i) => 1 - q.G[i], 30);
-    inner += PL.grainSection({ cx, cy, a: p.R * scale * 1.5, b: p.R * scale, rings, chalk: true, outline0: Rmed / p.R, uid: 's' + j });
-    inner += `<text x="${cx}" y="${cy + 70}" font-size="12" text-anchor="middle" fill="#2b2622">${m} min</text>`;
+  /* ---------- fig01: pot temperature, four cases ---------- */
+  var potCases = [
+    { name: 'Sea level, lid on', c: { lid: true, place: 'sea' } },
+    { name: 'Sea level, lid off', c: { lid: false, place: 'sea' } },
+    { name: '3000 m, lid on', c: { lid: true, place: 'alt3000' } },
+    { name: 'Pressure cooker', c: { lid: true, place: 'cooker' } }
+  ];
+  var potRows = [], potSeries = [], hl = [];
+  potCases.forEach(function (pc, i) {
+    var c = { water: 1.0, Pboil: 1500, duration: 1200, recordEvery: 5 };
+    for (var k in pc.c) c[k] = pc.c[k];
+    var r = P.runPot(c), h = r.hist;
+    potSeries.push({ name: pc.name, x: h.t.map(min), y: h.T, color: S[i] });
+    hl.push({ y: r.Tb, label: 'T_b = ' + r.Tb.toFixed(1) + ' °C', color: S[i] });
+    h.t.forEach(function (t, j) { potRows.push([pc.name, t, h.T[j], h.M[j], h.steam[j], r.Tb]); });
+    K('Boiling point: ' + pc.name, r.Tb, '°C'); K('Time to boil: ' + pc.name, r.tBoil, 's');
+    K('Boiled off in 20 min: ' + pc.name, h.steam[h.steam.length - 1], 'kg');
   });
-  inner += PL.colorbar({ x: 40, y: 228, w: 220, cmap: 'moisture', minLabel: 'dry (10 % wb)', maxLabel: 'wet (75 % wb)', label: 'moisture colour', uid: 'cb5' });
-  inner += `<rect x="330" y="226" width="16" height="14" fill="#fbfaf6" stroke="#b5a893"/><text x="352" y="238" font-size="11" fill="#2b2622">chalky white = ungelatinized starch (opacity 1 − G); dashed = original size</text>`;
-  inner += `<text x="40" y="275" font-size="10.5" fill="#776b5f">Calculated 1D equivalent-sphere fields drawn on a rice-grain outline (display mapping only).</text>`;
-  files['fig05b_grain_cross_sections.svg'] = PL.wrap(inner, 740, 290, 'light', 'Fig. 5b · The white core shrinks as water and gelatinization move inward (calculated)');
-  const ladder = [1, 2, 3, 4].map(L => ({ L, r: P.runGrain({ grain: { geom: 'sphere', R0: Rmed, N: 60, level: L, T0: 25 }, bath: { TC: 100 }, tEnd: 1800, nOut: 360, dtMax: 1, keepProfiles: false }) }));
-  files['fig05c_model_ladder.svg'] = PL.linePlot({ id: 'f5c', w: 720, h: 330, title: 'Fig. 5c · Which assumption matters? Centre gelatinization for model rungs L1–L4', xLabel: 'time in boiling water (min)', yLabel: 'G at the centre', xMin: 0, xMax: 20, yMin: 0, yMax: 1.02, legend: 'right',
-    series: ladder.map((l, j) => ({ name: `${P.LEVELS[l.L].short}: ${(l.r.events.tCoreGel / 60).toFixed(1)} min`, x: l.r.t.map(t => t / 60), y: l.r.Gc, color: C[j], width: 2.4 })),
-    hlines: [{ y: pd.G_done, label: 'chosen criterion G = 0.9' }] });
-  files['cooking_ladder.csv'] = csv(['level', 'description', 't_core_gel_min', 'Xmean_end', 'R_end_over_R0'], ladder.map(l => [l.L, '"' + P.LEVELS[l.L].name + '"', l.r.events.tCoreGel / 60, l.r.final.Xmean, l.r.final.R / Rmed]));
-  files['cooking_timeseries.csv'] = csv(['t_s', 'Xmean', 'X_centre', 'G_centre', 'R_mm', 'T_centre_C'], r.t.map((t, i) => [t, r.Xmean[i], r.Xc[i], r.Gc[i], r.R[i] * 1e3, r.Tc[i]]));
-}
+  hl = hl.filter(function (x, i) { return i !== 1; });
+  emit('fig01_pot_temperature.svg', PL.linePlot({ theme: TH, title: 'Stage 1 — water temperature in the pot (1.0 kg, 1500 W)', xlabel: 'time (min)', ylabel: 'water temperature (°C)',
+    series: potSeries, hlines: hl, legend: 'top', ymin: 20, ymax: 128,
+    note: 'CALCULATED: lumped energy and mass balance; temperature is capped at T_b(p) and the surplus power boils water off.' }));
+  csv('fig01_pot_temperature.csv', ['case', 't_s', 'T_C', 'M_kg', 'steam_kg', 'Tb_C'], potRows);
 
-/* ---- 6. The whole pot: where does the water go? ---- */
-{
-  const cfg = { water: 0.40, Pboil: 1500, Psim: 300, simmerAfterBoil: true, lid: true, tEnd: 2700, nOut: 270, rice: { massRaw: 0.2, grain: { geom: 'sphere', R0: Rmed, N: 40, level: 4 }, addAt: 'start', restTime: 600 } };
-  const o = P.runPot(cfg);
-  const tm = o.t.map(t => t / 60);
-  files['fig06_pot_water_partition.svg'] = PL.stackedArea({ id: 'f6', w: 720, h: 340, title: 'Fig. 6 · Absorption method (200 g rice, 400 g water, lid on): where the water goes', xLabel: 'time (min)', yLabel: 'water (g)', legend: 'right', x: tm,
-    series: [{ name: 'inside the grains', y: o.Mgrain.map(v => v * 1000), color: '#2e75a8' }, { name: 'free liquid in pot', y: o.M.map(v => Math.max(0, v) * 1000), color: '#9fcbbf' }, { name: 'left as steam', y: o.Mevap.map(v => v * 1000), color: '#c9b79a' }],
-    vlines: [{ x: o.events.tBoil / 60, label: 'boils' }, { x: o.events.tCoreGel / 60, label: 'core gelatinized', row: 1 }, { x: o.events.tDry / 60, label: 'free water gone → rest', row: 2 }],
-    note: `Total water conserved to ${Math.max(...o.waterResidual.map(Math.abs)).toExponential(1)} kg. 1.5 kW to boil, then 300 W simmer, lid on.` });
-  files['fig06b_pot_temperature_grain.svg'] = PL.linePlot({ id: 'f6b', w: 720, h: 320, title: 'Fig. 6b · Pot temperature and the representative grain during absorption cooking', xLabel: 'time (min)', yLabel: 'T (°C)  ·  100 × G_c  ·  40 × ⟨X⟩', legend: 'right', yMin: 0, yMax: 105,
-    series: [{ name: 'pot water T', x: tm, y: o.Tp, color: C[2] }, { name: 'grain centre T', x: tm, y: o.Tc, color: C[0], dash: '5 3' }, { name: '100 × G at centre', x: tm, y: o.Gc.map(g => 100 * g), color: C[3] }, { name: '40 × mean X', x: tm, y: o.Xmean.map(x => 40 * x), color: C[1] }] });
-  files['pot_absorption.csv'] = csv(['t_s', 'T_pot_C', 'free_water_g', 'water_in_grains_g', 'steam_g', 'Xmean', 'G_centre', 'phase', 'energy_residual_J', 'water_residual_kg'], o.t.map((t, i) => [t, o.Tp[i], o.M[i] * 1000, o.Mgrain[i] * 1000, o.Mevap[i] * 1000, o.Xmean[i], o.Gc[i], o.phase[i], o.energyResidual[i], o.waterResidual[i]]));
-}
+  /* ---------- fig02: heat conduction into the grain (water uptake off) ---------- */
+  var p = P.defaults(), R = P.equivalentSize('medium', 'sphere'), kX = P.cellK(p.X0, p), al = P.grainAlpha(p.X0, p);
+  var Bi = p.h * R / kX, tR = R * R / al;
+  var snaps = [0.5, 1, 2, 4, 8], SQ5 = PL.seqColors(5, TH);
+  var hr = P.runGrain({ mode: 'heat', R: R, TC: 100, T0: 25, h: p.h, duration: 30, outputs: { n: 300, extra: snaps }, dtMax: 0.01, dtFrac: 0.005, dtMin: 1e-4 });
+  var f2s = [], f2rows = [];
+  snaps.forEach(function (ts, i) {
+    var pr = hr.profiles.filter(function (q) { return Math.abs(q.t - ts) < 1e-6; })[0];
+    var Fo = ts / tR;
+    f2s.push({ name: 't = ' + ts + ' s', x: pr.rc.map(function (r) { return r * 1e3; }), y: pr.T, color: SQ5[i] });
+    var xs = [], ys = [];
+    for (var j = 0; j <= 10; j++) { var rs = j / 10; xs.push(rs * R * 1e3); ys.push(100 - 75 * P.sphereConvective(Bi, Fo, rs)); }
+    f2s.push({ name: 'series ' + ts + ' s', x: xs, y: ys, type: 'points', marker: 'circle', color: SQ5[i], noLegend: true });
+    pr.rc.forEach(function (r, j) { f2rows.push([ts, r / pr.R, pr.T[j], 100 - 75 * P.sphereConvective(Bi, Fo, r / pr.R), Bi, Fo]); });
+  });
+  emit('fig02_grain_T_profiles.svg', PL.linePlot({ theme: TH, title: 'Stage 2 — temperature inside the grain (Bi = ' + Bi.toFixed(2) + ')', xlabel: 'radius r (mm)', ylabel: 'temperature (°C)',
+    series: f2s, legend: 'top', ymin: 20, ymax: 102, xmin: 0, xmax: R * 1e3,
+    note: 'CALCULATED: lines = finite-volume model, circles = Carslaw–Jaeger series for a sphere with a convective surface. Water uptake switched off.' }));
+  csv('fig02_grain_T_profiles.csv', ['t_s', 'r_over_R', 'T_model_C', 'T_series_C', 'Bi', 'Fo'], f2rows);
+  var lumpK = p.h * 3 / R / ((p.c_s + p.X0 * p.c_w) / P.specVol(p.X0, p));
+  var lump = hr.hist.t.map(function (t) { return 100 - 75 * Math.exp(-lumpK * t); });
+  emit('fig02b_centre_vs_lumped.svg', PL.linePlot({ theme: TH, title: 'Stage 2 — centre and surface vs the lumped model', xlabel: 'time (s)', ylabel: 'temperature (°C)',
+    series: [{ name: 'surface cell', x: hr.hist.t, y: hr.hist.Ts }, { name: 'centre', x: hr.hist.t, y: hr.hist.Tc },
+      { name: 'lumped (Bi ≪ 1 assumption)', x: hr.hist.t, y: lump, type: 'dash' }],
+    vlines: [{ x: hr.events.tCentreWithin1K, label: 'centre within 1 K: ' + hr.events.tCentreWithin1K.toFixed(1) + ' s' }, { x: tR, label: 'R²/α = ' + tR.toFixed(1) + ' s' }],
+    legend: 'top', ymin: 20, ymax: 102, note: 'CALCULATED: Bi ≈ ' + Bi.toFixed(1) + ' > 0.1, so the centre lags the surface and the lumped model is wrong — but only for seconds.' }));
+  csv('fig02b_centre_vs_lumped.csv', ['t_s', 'T_centre_C', 'T_surface_C', 'T_mean_C', 'T_lumped_C'], hr.hist.t.map(function (t, i) { return [t, hr.hist.Tc[i], hr.hist.Ts[i], hr.hist.Tm[i], lump[i]]; }));
+  K('Equivalent sphere radius (medium)', R, 'm'); K('Biot number', Bi, '-'); K('Thermal diffusivity alpha(X0)', al, 'm2/s');
+  K('R^2/alpha', tR, 's'); K('Centre within 1 K (heat only)', hr.events.tCentreWithin1K, 's'); K('Centre 99 % (heat only)', hr.events.tCentre99, 's');
 
-/* ---- 7. No single cooking time ---- */
-{
-  const res = P.SCENARIOS.map(sc => P.runScenario(sc));
-  files['fig07_no_single_cooking_time.svg'] = PL.barChart({ w: 760, title: 'Fig. 7 · Same physics, different answers: core-gelatinization time across conditions', xLog: true, xMin: 1, xMax: 2e4, labelW: 300,
-    xLabel: 'time, log scale', ticks: [1, 10, 60, 600, 3600, 2e4], tickFmt: v => v < 60 ? v + ' s' : v < 3600 ? (v / 60) + ' min' : (v / 3600).toFixed(1).replace('.0', '') + ' h',
-    rows: res.map(r => ({ label: r.sc.name, value: r.tCoreGel, valueLabel: (r.tCoreGel / 60).toFixed(1) + ' min', color: '#2e75a8',
-      markers: [{ x: r.naiveHeat, color: '#c2412d' }, { x: r.naiveWater, color: '#b8700f', shape: 'diamond' }] })),
-    legend: [{ label: 'model core-gelatinization time', color: '#2e75a8' }, { label: 'thermal estimate R²/α', color: '#c2412d', shape: 'tick' }, { label: 'water estimate R²/D', color: '#b8700f', shape: 'diamond' }] });
-  files['scenario_times.csv'] = csv(['scenario', 'R_eq_mm', 'geometry', 'water_T_C', 'presoak_min', 't_core_gel_min', 't_centre_within_1K_s', 'R2_over_alpha_s', 'R2_over_D_min', 'Xmean_end'],
-    res.map(r => ['"' + r.sc.name + '"', r.R * 1e3, r.sc.geom, r.TC, r.sc.presoak, r.tCoreGel / 60, r.tHeat, r.naiveHeat, r.naiveWater / 60, r.Xfinal]));
-}
+  /* ---------- fig03: soaking ---------- */
+  var sizes = ['long', 'medium', 'short'], soakRuns = {}, f3s = [], f3b = [], f3rows = [];
+  sizes.forEach(function (g, i) {
+    var r = P.runGrain({ mode: 'soak', grain: g, TC: 25, T0: 25, duration: 3 * 3600, outputs: { n: 180 }, profiles: g === 'medium' });
+    soakRuns[g] = r;
+    var D25 = P.diffusivity(25, p, P.levelFlags(4), 0, p.X0);
+    f3s.push({ name: P.GRAIN_PRESETS[g].name + ' (R = ' + (r.R0 * 1e3).toFixed(2) + ' mm)', x: r.hist.t.map(min), y: r.hist.Xm, color: S[i] });
+    f3b.push({ name: P.GRAIN_PRESETS[g].name, x: r.hist.t.map(function (t) { return D25 * t / (r.R0 * r.R0); }), y: r.hist.Xm.map(function (X) { return (X - p.X0) / (p.Xnat - p.X0); }), color: S[i] });
+    r.hist.t.forEach(function (t, j) { f3rows.push([g, r.R0, t, D25 * t / (r.R0 * r.R0), r.hist.Xm[j], r.hist.Xc[j], r.hist.RR0[j]]); });
+  });
+  var ms = soakRuns.medium;
+  emit('fig03_soaking_uptake.svg', PL.linePlot({ theme: TH, title: 'Stage 3 — soaking at 25 °C: mean moisture of three grain sizes', xlabel: 'time (min)', ylabel: 'mean moisture ⟨X⟩ (kg/kg dry)',
+    series: f3s, hlines: [{ y: p.Xnat, label: 'X_nat = 0.40 (raw starch capacity)' }], legend: 'top', ymin: 0.1, ymax: 0.42,
+    note: 'CALCULATED: Fick diffusion relative to the solid, D(25 °C) from Arrhenius scaling of D_nat; thin grains (high S/V) soak faster.' }));
+  var FoC = [], FC = [];
+  for (var q = 0; q <= 120; q++) { var Fo = Math.pow(10, -3 + 3 * q / 120); FoC.push(Fo); FC.push(P.uptakeFraction('sphere', Fo)); }
+  f3b.push({ name: 'Crank series (fixed sphere)', x: FoC, y: FC, type: 'dash', color: th.ink });
+  emit('fig03b_soaking_scaled.svg', PL.linePlot({ theme: TH, title: 'Stage 3 — scaled uptake collapses onto one curve', xlabel: 'Fourier number Fo = D t / R0²', ylabel: 'fractional uptake (⟨X⟩ − X0)/(X_nat − X0)',
+    series: f3b, xlog: true, xmin: 1e-3, xmax: 1, ymin: 0, ymax: 1.05, legend: 'top',
+    note: 'CALCULATED: time ∝ size² — once time is scaled by R0²/D the three sizes coincide; small offset = swelling (moving boundary).' }));
+  csv('fig03b_soaking_scaled.csv', ['grain', 'R0_m', 'Fo', 'fractional_uptake', 'crank_series'], f3rows.map(function (r) { var F = (r[4] - p.X0) / (p.Xnat - p.X0); return [r[0], r[1], r[3], F, P.uptakeFraction('sphere', r[3])]; }));
+  csv('fig03_soaking_uptake.csv', ['grain', 'R0_m', 't_s', 'Fo', 'X_mean', 'X_centre', 'R_over_R0'], f3rows);
+  var f3c = [], f3crows = [];
+  var SQ6 = PL.seqColors(6, TH);
+  [5, 15, 30, 60, 120, 180].forEach(function (tm, i) {
+    var pr = ms.profiles.reduce(function (b, q) { return Math.abs(q.t - tm * 60) < Math.abs(b.t - tm * 60) ? q : b; });
+    f3c.push({ name: tm + ' min', x: pr.rc.map(function (r) { return r * 1e3; }), y: pr.X, color: SQ6[i] });
+    pr.rc.forEach(function (r, j) { f3crows.push([pr.t, r, pr.X[j]]); });
+  });
+  emit('fig03c_soaking_profiles.svg', PL.linePlot({ theme: TH, title: 'Stage 3 — moisture profiles while soaking (medium grain, 25 °C)', xlabel: 'radius r (mm)', ylabel: 'moisture X (kg/kg dry)',
+    series: f3c, legend: 'top', ymin: 0.1, ymax: 0.42, xmin: 0,
+    note: 'CALCULATED: the surface saturates at once and a wet front moves inward; the grain swells slightly (R/R0 ≈ ' + ms.final.RR0.toFixed(3) + ' after 3 h).' }));
+  csv('fig03c_soaking_profiles.csv', ['t_s', 'r_m', 'X'], f3crows);
+  K('Soak 25 C: mean X at 30 min', P.interp(ms.hist.t, ms.hist.Xm, 1800), 'kg/kg db'); K('Soak 25 C: mean X at 2 h', P.interp(ms.hist.t, ms.hist.Xm, 7200), 'kg/kg db');
+  K('Soak 25 C: R/R0 after 3 h', ms.final.RR0, '-');
+  K('D(25 C)', P.diffusivity(25, p, P.levelFlags(4), 0, p.X0), 'm2/s'); K('D(45 C)', P.diffusivity(45, p, P.levelFlags(4), 0, p.X0), 'm2/s');
 
-/* ---- 8. Check tables + check figures ---- */
-{
-  const ck = CK.runChecks();
-  for (const k in ck.tables) files[k + '.csv'] = ck.tables[k];
-  const up = ck.tables.uptake_fv_vs_series.split('\n').slice(1).map(l => l.split(','));
-  const geoms = ['sphere', 'cylinder', 'slab'];
-  files['fig08_check_uptake_vs_series.svg'] = PL.linePlot({ id: 'f8', w: 720, h: 330, title: 'Fig. 8 · Independent check: finite-volume uptake vs exact Crank series', xLabel: 'Fo = D t / R²', yLabel: 'M_t / M_∞', xLog: true, xMin: 1e-3, xMax: 0.5, yMin: 0, yMax: 1, legend: 'right',
-    series: geoms.flatMap((g, j) => { const rows = up.filter(r => r[0] === g); const xs = Array.from({ length: 80 }, (_, i) => 1e-3 * Math.pow(500, i / 79)); return [{ name: g + ' (series)', x: xs, y: xs.map(x => P.uptakeFraction(g, x)), color: C[j], width: 1.6 }, { name: g + ' (finite volume)', x: rows.map(r => +r[1]), y: rows.map(r => +r[3]), points: true, color: C[j] }]; }),
-    note: 'Constant D, fixed size, constant surface value (model rung L1 with heat off). Max difference < 0.002.' });
-  const gc = ck.tables.grid_convergence.split('\n').slice(1).map(l => l.split(',').map(Number));
-  files['fig09_grid_convergence.svg'] = PL.linePlot({ id: 'f9', w: 560, h: 320, title: 'Fig. 9 · Grid convergence of the water solver', xLabel: 'number of shells N', yLabel: '|uptake error| at Fo = 0.05', xLog: true, yLog: true, xMin: 8, xMax: 100, yMin: 5e-5, yMax: 1e-2, legend: 'top',
-    series: [{ name: 'finite volume vs series', x: gc.map(r => r[0]), y: gc.map(r => r[1]), points: true, line: true, color: C[1] }, { name: 'slope −2 reference', x: [10, 80], y: [gc[0][1], gc[0][1] / 64], color: C[5], dash: '5 4' }] });
-}
+  /* ---------- fig04: the race ---------- */
+  var race = P.runGrain({ level: 4, TC: 100, T0: 25, duration: 1e4, outputs: { n: 220, log: true, tmin: 0.02 }, profiles: false });
+  var hp = race.hist.Tc.map(function (T) { return 100 * (T - 25) / 75; });
+  var wp = race.hist.Xc.map(function (X) { return 100 * (X - p.X0) / (p.Xgel - p.X0); });
+  var Dg = P.DgelAt(100, p), Le = al / Dg;
+  var t50w = P.crossingTime(race.hist.t, wp, 50);
+  emit('fig04_race.svg', PL.linePlot({ theme: TH, title: 'Stage 4 — the race: heat vs water at the grain centre (100 °C)', xlabel: 'time (s, log scale)', ylabel: 'progress at the centre (%)',
+    series: [{ name: 'heat: (T_c − T0)/(T_w − T0)', x: race.hist.t, y: hp, color: S[2] }, { name: 'water: (X_c − X0)/(X_gel − X0)', x: race.hist.t, y: wp, color: S[1] }],
+    xlog: true, xmin: 0.02, xmax: 1e4, ymin: 0, ymax: 105, legend: 'top',
+    vlines: [{ x: tR, label: 'R²/α = ' + tR.toFixed(0) + ' s', color: S[2] }, { x: R * R / Dg, label: 'R²/D = ' + (R * R / Dg / 60).toFixed(0) + ' min', color: S[1] }],
+    note: 'CALCULATED: full model (L4). Le = α/D ≈ ' + Le.toFixed(0) + ': heat wins by more than two orders of magnitude, so water transport sets the cooking time.' }));
+  csv('fig04_race.csv', ['t_s', 'heat_progress_pct', 'water_progress_pct', 'T_centre_C', 'X_centre'], race.hist.t.map(function (t, i) { return [t, hp[i], wp[i], race.hist.Tc[i], race.hist.Xc[i]]; }));
+  K('Lewis number Le = alpha/D_gel(100 C)', Le, '-'); K('D_gel(100 C)', Dg, 'm2/s'); K('Heat 99 % at centre (full model)', race.events.tCentre99, 's');
+  K('Water 50 % at centre (full model)', t50w, 's'); K('Ratio water50 / heat99', t50w / race.events.tCentre99, '-');
 
-for (const k in files) { print('@@FILE ' + k); print(files[k]); }
-})(globalThis);
+  /* ---------- fig05: cooking a grain ---------- */
+  var ck = P.runGrain({ level: 4, TC: 100, T0: 25, duration: 1500, outputs: { n: 300, extra: [60, 120, 240, 360, 480, 600, 720, 840] } });
+  var f5 = [], f5d = [], f5rows = [];
+  var SQ7 = PL.seqColors(7, TH);
+  [1, 2, 4, 6, 8, 10, 14].forEach(function (tm, i) {
+    var pr = ck.profiles.filter(function (q) { return Math.abs(q.t - tm * 60) < 1e-6; })[0];
+    f5.push({ name: tm + ' min', x: pr.rc.map(function (r) { return r * 1e3; }), y: pr.X, color: SQ7[i] });
+    f5d.push({ name: tm + ' min', x: pr.rc.map(function (r) { return r * 1e3; }), y: pr.G, color: SQ7[i] });
+    pr.rc.forEach(function (r, j) { f5rows.push([tm * 60, r, pr.X[j], pr.G[j], pr.T[j], pr.R]); });
+  });
+  emit('fig05_cook_profiles.svg', PL.linePlot({ theme: TH, title: 'Stage 5 — moisture inside a cooking grain (medium, 100 °C, L4)', xlabel: 'radius r (mm) — the grain swells', ylabel: 'moisture X (kg/kg dry)',
+    series: f5, legend: 'top', xmin: 0, ymin: 0, ymax: 2.8, hlines: [{ y: p.Xgel, label: 'X_gel = 2.6' }, { y: p.Xnat, label: 'X_nat = 0.40' }],
+    note: 'CALCULATED: surface capacity rises from X_nat to X_gel as the surface gelatinizes; shells follow the dry solid so the outer radius grows.' }));
+  emit('fig05d_G_profiles.svg', PL.linePlot({ theme: TH, title: 'Stage 5 — gelatinized fraction G(r): the white core shrinks outside-in', xlabel: 'radius r (mm)', ylabel: 'gelatinized fraction G',
+    series: f5d, legend: 'top', xmin: 0, ymin: 0, ymax: 1.05, hlines: [{ y: 0.5, label: 'front (G = 0.5)' }],
+    note: 'CALCULATED: first-order kinetics with Arrhenius k_g(T) and water availability f(X); the core is "cooked" when G_c ≥ 0.9 (a chosen criterion).' }));
+  csv('fig05_cook_profiles.csv', ['t_s', 'r_m', 'X', 'G', 'T_C', 'R_m'], f5rows);
+  csv('fig05d_G_profiles.csv', ['t_s', 'r_m', 'G'], f5rows.map(function (r) { return [r[0], r[1], r[3]]; }));
+  // cross-section strip
+  var stripT = [0, 2, 4, 6, 8, 10, 12, 14], Wd = 900, Hd = 250, s5 = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + Wd + ' ' + Hd + '" width="' + Wd + '" height="' + Hd + '" font-family="' + PL.esc(PL.FONT) + '"><rect width="' + Wd + '" height="' + Hd + '" fill="' + th.bg + '"/>';
+  s5 += '<text x="14" y="22" font-family="' + PL.esc(PL.SERIF) + '" font-size="15" font-weight="600" fill="' + th.ink + '">Stage 5 — grain cross-section every 2 min (medium, 100 °C, L4)</text>' + PL.tagBadge(Wd - 10, 8, 'CALCULATED', th, true);
+  var cks = P.runGrain({ level: 4, TC: 100, T0: 25, duration: 900, outputs: { n: 15, extra: stripT.map(function (x) { return x * 60; }) } });
+  stripT.forEach(function (tm, i) {
+    var pr = cks.profiles.filter(function (q) { return Math.abs(q.t - tm * 60) < 1e-6; })[0];
+    var gm = 0; pr.G.forEach(function (g) { gm += g; }); gm /= pr.G.length;
+    var cx = 62 + i * 111;
+    s5 += PL.grainSection({ cx: cx, cy: 118, R0px: 19, R0: cks.R0, profile: pr, mode: 'moisture', chalk: true, front: true, rawOutline: true, gloss: gm, aspect: 1.65, rot: -Math.PI / 2, theme: TH, shadow: false });
+    s5 += '<text x="' + cx + '" y="198" font-size="12" fill="' + th.ink + '" text-anchor="middle">' + tm + ' min</text>';
+    s5 += '<text x="' + cx + '" y="213" font-size="10.5" fill="' + th.muted + '" text-anchor="middle">G_c ' + pr.G[0].toFixed(2) + ' · R/R0 ' + (pr.R / cks.R0).toFixed(2) + '</text>';
+  });
+  s5 += '<text x="14" y="240" font-size="10.5" fill="' + th.muted + '">CALCULATED fields (moisture colour on wet basis, white = ungelatinized, red dash = G = 0.5 front, grey dash = raw size) drawn on an ILLUSTRATIVE grain outline.</text></svg>';
+  emit('fig05b_cross_section_strip.svg', s5);
+  var s5rows = [];
+  stripT.forEach(function (tm) { var pr = cks.profiles.filter(function (q) { return Math.abs(q.t - tm * 60) < 1e-6; })[0]; pr.rc.forEach(function (r, j) { s5rows.push([tm * 60, r, pr.X[j], pr.G[j], pr.R]); }); });
+  csv('fig05b_cross_section_strip.csv', ['t_s', 'r_m', 'X', 'G', 'R_m'], s5rows);
+  // ladder
+  var lad = [], ladRows = [];
+  for (var L = 1; L <= 4; L++) {
+    var lr = P.runGrain({ level: L, TC: 100, T0: 25, duration: 1500, outputs: { n: 250 }, profiles: false });
+    lad.push({ name: P.LEVELS[L].short + ' ' + P.LEVELS[L].name + ' — ' + (lr.events.tCoreGel / 60).toFixed(1) + ' min', x: lr.hist.t.map(min), y: lr.hist.Gc, color: S[L - 1] });
+    lr.hist.t.forEach(function (t, j) { ladRows.push([L, t, lr.hist.Gc[j], lr.hist.Xc[j], lr.hist.RR0[j]]); });
+    K('Ladder ' + P.LEVELS[L].short + ' core time', lr.events.tCoreGel / 60, 'min', P.LEVELS[L].name);
+  }
+  emit('fig05c_ladder.svg', PL.linePlot({ theme: TH, title: 'Stage 5 — model ladder: which assumption changes the answer?', xlabel: 'time (min)', ylabel: 'gelatinized fraction at the centre G_c',
+    series: lad, legend: 'top', ymin: 0, ymax: 1.05, hlines: [{ y: p.G_done, label: 'cooked criterion G_c = 0.9' }],
+    note: 'CALCULATED: adding swelling (L3) changes the core time most; Arrhenius D(T) at 100 °C (L4) brings it back slightly.' }));
+  csv('fig05c_ladder.csv', ['level', 't_s', 'G_centre', 'X_centre', 'R_over_R0'], ladRows);
+  [0, 1800, 7200].forEach(function (ps) {
+    var r = P.runGrain({ level: 4, TC: 100, duration: 1500, outputs: { n: 10 }, profiles: false, stopAtGel: true, presoak: ps ? { time: ps, TC: 25 } : null });
+    K('Core time, presoak ' + ps / 60 + ' min', r.events.tCoreGel / 60, 'min');
+  });
+  K('Cooked grain R/R0 (25 min)', ck.final.RR0, '-'); K('Cooked grain volume ratio (25 min)', Math.pow(ck.final.RR0, 3), '-');
+
+  /* ---------- fig06: the whole pot ---------- */
+  var pot = P.runPot({ water: 0.4, Pboil: 1500, Psim: 300, simmerAfterBoil: true, lid: true, duration: 2700, recordEvery: 5,
+    rice: { massRaw: 0.2, grain: 'medium', addAt: 'start', restTime: 600 } });
+  var ph = pot.hist;
+  emit('fig06_pot_water_partition.svg', PL.stackedArea({ theme: TH, title: 'Stage 6 — where does the water go? (200 g rice, 400 g water, lid on)', xlabel: 'time (min)', ylabel: 'water (g)',
+    x: ph.t.map(min), layers: [{ name: 'absorbed by grains', y: ph.absorbed.map(function (v) { return v * 1e3; }), color: S[1] },
+      { name: 'free water in pot', y: ph.M.map(function (v) { return v * 1e3; }), color: '#9fcbbf' }, { name: 'left as steam', y: ph.steam.map(function (v) { return v * 1e3; }), color: S[0] }],
+    vlines: [{ x: pot.tCoreGel / 60, label: 'core cooked ' + (pot.tCoreGel / 60).toFixed(1) + ' min' }, { x: pot.tDry / 60, label: 'free water gone ' + (pot.tDry / 60).toFixed(1) + ' min' }],
+    legend: 'top', note: 'CALCULATED: two control volumes (free water, N grains); the stack is constant = 400 g, i.e. water is conserved exactly.' }));
+  emit('fig06b_pot_T_grain.svg', PL.linePlot({ theme: TH, title: 'Stage 6 — pot temperature and the representative grain', xlabel: 'time (min)', ylabel: 'temperature (°C) / centre gelatinized (%)',
+    series: [{ name: 'pot water T', x: ph.t.map(min), y: ph.T }, { name: 'grain centre T', x: ph.t.map(min), y: ph.Tc, type: 'dash' },
+      { name: 'G_c × 100', x: ph.t.map(min), y: ph.Gc.map(function (g) { return g * 100; }) }, { name: 'mean moisture ⟨X⟩ × 40', x: ph.t.map(min), y: ph.Xm.map(function (x) { return x * 40; }) }],
+    legend: 'top', ymin: 0, ymax: 110, vlines: [{ x: pot.tDry / 60, label: 'heater off, rest' }],
+    note: 'CALCULATED: 1500 W to boil, then 300 W simmer; at dry-out the heater is switched off and the lidded pot rests (h = 100 W/m²K).' }));
+  csv('fig06_pot_water_partition.csv', ['t_s', 'T_C', 'free_water_kg', 'absorbed_kg', 'steam_kg', 'X_mean', 'G_centre', 'T_centre_C', 'R_m', 'Pin_J', 'sensible_J', 'toGrains_J', 'steam_enthalpy_J', 'loss_J', 'energy_residual', 'water_residual', 'phase'],
+    ph.t.map(function (t, i) { return [t, ph.T[i], ph.M[i], ph.absorbed[i], ph.steam[i], ph.Xm[i], ph.Gc[i], ph.Tc[i], ph.R[i], ph.Pin[i], ph.sensible[i], ph.toGrains[i], ph.latent[i], ph.loss[i], ph.energyResidual[i], ph.waterResidual[i], ph.phase[i]]; }));
+  csv('fig06b_pot_T_grain.csv', ['t_s', 'T_pot_C', 'T_centre_C', 'G_centre', 'X_mean', 'phase'], ph.t.map(function (t, i) { return [t, ph.T[i], ph.Tc[i], ph.Gc[i], ph.Xm[i], ph.phase[i]]; }));
+  var Lp = ph.t.length - 1;
+  K('Pot: water into rice', ph.absorbed[Lp] * 1e3, 'g'); K('Pot: steam', ph.steam[Lp] * 1e3, 'g'); K('Pot: core cooked', pot.tCoreGel / 60, 'min');
+  K('Pot: free water gone', pot.tDry / 60, 'min'); K('Pot: number of grains N', pot.rice.N, '-');
+
+  /* ---------- fig07: scenarios ---------- */
+  var scen = P.SCENARIOS.map(function (sc) { return P.runScenario(sc); });
+  var items = scen.map(function (o, i) {
+    return { label: o.sc.name + ' (' + o.Tb.toFixed(1) + ' °C)', value: o.tCoreGel / 60, valueLabel: (o.tCoreGel / 60).toFixed(1) + ' min', color: i === 0 ? S[0] : S[1],
+      markers: [{ v: o.naiveHeat / 60, shape: 'tick', color: S[2] }, { v: o.naiveWater / 60, shape: 'diamond', color: S[3] }] };
+  });
+  emit('fig07_scenarios.svg', PL.barChart({ theme: TH, title: 'Stage 7 — no universal cooking time', xlabel: 'time (min, log scale)', items: items, xmin: 0.05, xmax: 200,
+    ticks: [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200], width: 820,
+    legendItems: [{ name: 'model core time (L4, G_c ≥ 0.9)', color: S[1] }, { name: 'R²/α (thermal estimate)', shape: 'tick', color: S[2] }, { name: 'R²/D_gel(T_b) (water time scale)', shape: 'diamond', color: S[3] }],
+    note: 'CALCULATED: same physics, nine situations. The thermal estimate R²/α is too short by one to two orders of magnitude; R²/D is a scale, not a cooking time.' }));
+  csv('fig07_scenarios.csv', ['scenario', 'grain', 'geometry', 'place', 'Tb_C', 'R_m', 'presoak_s', 'brown', 't_core_min', 't_centre_within_1K_s', 'R2_over_alpha_s', 'R2_over_Dgel_s', 'too_short_factor'],
+    scen.map(function (o) { return [o.sc.id, o.sc.grain, o.sc.geom, o.sc.place, o.Tb, o.R, o.sc.presoak, o.sc.brown ? 1 : 0, o.tCoreGel / 60, o.tHeat, o.naiveHeat, o.naiveWater, o.tCoreGel / o.naiveHeat]; }));
+  scen.forEach(function (o) { K('Scenario ' + o.sc.id + ' core time', o.tCoreGel / 60, 'min', o.sc.name); });
+
+  /* ---------- fig08: FV vs series (uptake, three geometries) ---------- */
+  var f8 = [], f8rows = [];
+  ['sphere', 'cylinder', 'slab'].forEach(function (g, i) {
+    var Rg = P.equivalentSize('medium', g), D = p.D_const, tRg = Rg * Rg / D;
+    var r = P.runGrain({ level: 1, geom: g, R: Rg, mode: 'soak', Xeq: p.Xnat, TC: 25, T0: 25, duration: 0.6 * tRg, outputs: { n: 60, log: true, tmin: 1e-3 * tRg }, profiles: false, dtFrac: 0.005, dtMax: 2 });
+    var Fo = r.hist.t.map(function (t) { return t / tRg; }), F = r.hist.Xm.map(function (X) { return (X - p.X0) / (p.Xnat - p.X0); });
+    var Fs = Fo.map(function (f) { return P.uptakeFraction(g, f); });
+    f8.push({ name: g + ' (model)', x: Fo.slice(1), y: F.slice(1), type: 'points', color: S[i] });
+    var FoL = [], FsL = [];
+    for (var q = 0; q <= 100; q++) { var ff = Math.pow(10, -3 + Math.log10(600) * q / 100); FoL.push(ff); FsL.push(P.uptakeFraction(g, ff)); }
+    f8.push({ name: g + ' (Crank series)', x: FoL, y: FsL, color: S[i], noLegend: true });
+    for (var j = 1; j < Fo.length; j++) f8rows.push([g, Rg, Fo[j], F[j], Fs[j]]);
+  });
+  emit('fig08_uptake_fv_vs_series.svg', PL.linePlot({ theme: TH, title: 'Independent check — finite volumes vs Crank series (constant D)', xlabel: 'Fourier number Fo = D t / R²', ylabel: 'fractional uptake M_t/M∞',
+    series: f8, xlog: true, xmin: 1e-3, xmax: 0.6, ymin: 0, ymax: 1.02, legend: 'top', note: 'CALCULATED: squares = model (60 shells), lines = analytical series; slab ≤ cylinder ≤ sphere at equal Fo because S/V rises.' }));
+  csv('fig08_uptake_fv_vs_series.csv', ['geometry', 'R_m', 'Fo', 'F_model', 'F_series'], f8rows);
+
+  /* ---------- checks (also used by fig09) ---------- */
+  var res = CK.runAll();
+  emit('checks_summary.csv', CK.summaryCSV(res));
+  res.forEach(function (r) { if (r.csv) emit(CK.csvName(r), CK.toCSV(r.csv.header, r.csv.rows)); });
+  var a7 = res.filter(function (r) { return r.id === 'A7'; })[0];
+  var Ns = a7.csv.rows.map(function (r) { return r[0]; }), errs = a7.csv.rows.map(function (r) { return r[1]; });
+  var refl = Ns.map(function (n) { return errs[0] * Math.pow(Ns[0] / n, 2); });
+  emit('fig09_grid_convergence.svg', PL.linePlot({ theme: TH, title: 'Independent check — grid convergence (sphere uptake profile, Fo = 0.05)', xlabel: 'number of shells N', ylabel: 'max |error| vs series',
+    series: [{ name: 'model error', x: Ns, y: errs, type: 'points' }, { name: 'model error ', x: Ns, y: errs, noLegend: true, noHover: true }, { name: 'slope −2 reference', x: Ns, y: refl, type: 'dash', color: th.muted }],
+    xlog: true, ylog: true, xmin: 15, xmax: 100, xticks: [20, 40, 80], legend: 'top',
+    note: 'CALCULATED: observed order ' + a7.value.toFixed(2) + ' (second-order finite volumes; time step kept tiny so the spatial error dominates).' }));
+  csv('fig09_grid_convergence.csv', ['N_shells', 'max_abs_error', 'slope2_reference'], Ns.map(function (n, i) { return [n, errs[i], refl[i]]; }));
+  var c = CK.counts(res);
+  K('Verification checks passed', c.PASS, 'of ' + res.length); K('Verification checks INFO', c.INFO, ''); K('Verification checks failed', c.FAIL, '');
+  csv('key_results.csv', ['quantity', 'value', 'unit', 'note'], key);
+  log('checks: ' + c.PASS + ' pass, ' + c.INFO + ' info, ' + c.FAIL + ' fail');
+  log('key results: ' + key.length + ' rows');
+})(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -2,71 +2,132 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rice Model Checks</title>
-<meta name="description" content="Independent scientific checks of the Rice on the Boil model: analytical solutions, conservation, limiting cases, scaling and plausibility against sources.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rice on the Boil — Verification</title>
 <style>
-:root{--bg:#f5efe3;--panel:#fffdf8;--ink:#2b2622;--muted:#776b5f;--line:#e5d9c5;--accent:#b8700f;--good:#3f7d34;--bad:#b3321f;--info:#2f7fb5}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141210;--panel:#1e1b18;--ink:#efe7da;--muted:#a99d8f;--line:#3a332c;--accent:#e6a23c;--good:#86c26f;--bad:#ef7a62;--info:#6db3e3}}
-:root[data-theme="dark"]{--bg:#141210;--panel:#1e1b18;--ink:#efe7da;--muted:#a99d8f;--line:#3a332c;--accent:#e6a23c;--good:#86c26f;--bad:#ef7a62;--info:#6db3e3}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:1100px;margin:auto;padding:24px 16px 48px}
-h1{font:600 28px/1.2 "Iowan Old Style",Palatino,Georgia,serif;margin:0 0 6px}
-h2{font:600 18px "Iowan Old Style",Palatino,Georgia,serif;margin:26px 0 8px}
-p{color:var(--muted);margin:6px 0}
-a{color:var(--accent)}
-.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
-button{border:0;background:var(--accent);color:#fff;border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer;font:600 14px system-ui}
-.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line);font-weight:500}
-.sum{font-weight:600}
-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13.5px}
-th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-th{color:var(--muted);font-weight:500;font-size:12px}
-td.v{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
-.st{font-weight:700;font-size:12px;padding:2px 8px;border-radius:6px;color:#fff;display:inline-block}
-.PASS{background:var(--good)}.FAIL{background:var(--bad)}.INFO{background:var(--info)}
-.d{color:var(--muted);font-size:12px}
-.wrap{overflow-x:auto}
+  :root {
+    --bg: #fbf7ef; --card: #fffdf8; --ink: #2b2622; --muted: #776b5f; --line: #e6dccb; --accent: #b8700f;
+    --pass: #3f7d31; --pass-bg: #e5f1dd; --fail: #b3321f; --fail-bg: #f8e0da; --info: #2f6f9f; --info-bg: #dfecf6;
+    --serif: 'Iowan Old Style', Palatino, 'Palatino Linotype', Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #171512; --card: #1f1c19; --ink: #efe7da; --muted: #a89c8c; --line: #3a332b; --accent: #e3a040;
+      --pass: #8fd17a; --pass-bg: #243522; --fail: #f08a76; --fail-bg: #3d2420; --info: #7fb8e6; --info-bg: #1f2f3d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #171512; --card: #1f1c19; --ink: #efe7da; --muted: #a89c8c; --line: #3a332b; --accent: #e3a040;
+    --pass: #8fd17a; --pass-bg: #243522; --fail: #f08a76; --fail-bg: #3d2420; --info: #7fb8e6; --info-bg: #1f2f3d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--card); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-family: var(--serif); font-size: 20px; margin: 0; flex: 1 1 auto; }
+  header a, button { font: inherit; font-size: 13.5px; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 13px; cursor: pointer; text-decoration: none; }
+  button:hover, header a:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { max-width: 1100px; margin: 0 auto; padding: 18px 16px 60px; }
+  .lead { color: var(--muted); max-width: 760px; }
+  .summary { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 6px; align-items: center; }
+  .chip { display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: .05em; padding: 2px 9px; border-radius: 999px; }
+  .chip.PASS { color: var(--pass); background: var(--pass-bg); } .chip.FAIL { color: var(--fail); background: var(--fail-bg); }
+  .chip.INFO { color: var(--info); background: var(--info-bg); } .chip.WAIT { color: var(--muted); background: var(--line); }
+  .big { font-size: 14px; padding: 4px 12px; }
+  h2 { font-family: var(--serif); font-size: 18px; margin: 26px 0 8px; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  tr:last-child td { border-bottom: 0; }
+  td.id { font-weight: 700; white-space: nowrap; } td.det { color: var(--muted); } td.tgt { white-space: nowrap; font-size: 12.5px; }
+  td button { padding: 2px 9px; font-size: 12px; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 30px; }
+  code { font-size: 12.5px; background: var(--line); padding: 1px 5px; border-radius: 4px; }
 </style>
 </head>
 <body>
+<header>
+  <h1>Rice on the Boil — verification suite</h1>
+  <a href="../Model/index.html">← Back to the model</a>
+  <button id="rerun" class="primary">Run again</button>
+  <button id="dlsum">Summary CSV</button>
+  <button id="dlall">All CSVs (one file)</button>
+  <button id="theme">Theme</button>
+</header>
 <main>
-  <h1>Independent checks of the rice model</h1>
-  <p>This page runs <code>Code/checks.js</code> against the same engine the interactive model uses (<code>Model/physics.js</code>). Nothing is installed and nothing leaves this browser. Each check states what is compared, the tolerance and the result.</p>
-  <p>Groups — <b>A</b> numerical model vs exact analytical solutions · <b>B</b> conservation of water, energy, dry solid and volume · <b>C</b> limiting cases · <b>D</b> scaling and order-of-magnitude arguments · <b>E</b> plausibility against published values (not fitted).</p>
-  <div class="bar"><button id="run">Run all checks</button><span class="sum" id="sum">Running…</span><span class="d" id="time"></span></div>
-  <div class="wrap"><table><thead><tr><th>ID</th><th>Check</th><th style="text-align:right">Value</th><th>Tolerance</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div>
-  <h2>Data behind the checks (CSV)</h2>
-  <p>Download the comparison tables (these are also written to <code>Results/</code> by <code>sh Code/make_results.sh</code>).</p>
-  <div class="bar" id="dl"></div>
-  <p><a href="../Model/index.html">← Back to the interactive model</a></p>
+  <p class="lead">Thirty-three automatic checks of the physics engine: numerics against analytical solutions (A), exact discrete conservation (B), limiting cases (C), scaling and dimensionless groups (D) and published values that were <em>not</em> used to tune the model (E). Every result is CALCULATED by <code>Model/physics.js</code> in your browser. The same suite runs from the terminal: <code>jsc Model/physics.js Code/checks.js</code>.</p>
+  <div class="summary" id="summary"><span class="chip WAIT big">running…</span></div>
+  <div id="groups"></div>
+  <p class="note">INFO rows report a quantity without a pass/fail threshold. Each row's CSV holds the compared numbers (model vs reference) so the check can be reproduced independently; <code>Code/analytical_check.py</code> repeats the key comparisons in Python.</p>
 </main>
 <script src="../Model/physics.js"></script>
 <script src="checks.js"></script>
 <script>
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function run() {
-  $('sum').textContent = 'Running…'; $('rows').innerHTML = '';
-  setTimeout(() => {
-    const t0 = performance.now(), out = RiceChecks.runChecks();
-    const groups = { A: 'A · Numerical model vs analytical solutions', B: 'B · Conservation', C: 'C · Limiting cases', D: 'D · Scaling', E: 'E · Plausibility against sources (not fitted)' };
-    let html = '', last = '';
-    for (const r of out.results) {
-      if (r.group !== last) { html += `<tr><th colspan="5" style="background:transparent;color:var(--ink);font-weight:650;font-size:13.5px">${groups[r.group]}</th></tr>`; last = r.group; }
-      const v = typeof r.value === 'number' ? (Math.abs(r.value) !== 0 && (Math.abs(r.value) < 1e-3 || Math.abs(r.value) >= 1e5) ? r.value.toExponential(2) : (+r.value.toPrecision(4)).toString()) : esc(r.value);
-      html += `<tr><td>${r.id}</td><td>${esc(r.name)}${r.detail ? `<div class="d">${esc(r.detail)}</div>` : ''}</td><td class="v">${v}</td><td>${esc(r.tol)}</td><td><span class="st ${r.status}">${r.status}</span></td></tr>`;
-    }
-    $('rows').innerHTML = html;
-    const nf = out.results.filter(r => r.status === 'FAIL').length, np = out.results.filter(r => r.status === 'PASS').length;
-    $('sum').textContent = `${np} passed · ${nf} failed · ${out.results.length - np - nf} informational`;
-    $('sum').style.color = nf ? 'var(--bad)' : 'var(--good)';
-    $('time').textContent = `(${((performance.now() - t0) / 1000).toFixed(1)} s)`;
-    $('dl').innerHTML = Object.keys(out.tables).map(k => `<button class="ghost" data-k="${k}">${k}.csv</button>`).join('');
-    $('dl').querySelectorAll('button').forEach(b => b.onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out.tables[b.dataset.k]], { type: 'text/csv' })); a.download = b.dataset.k + '.csv'; a.click(); });
-  }, 30);
-}
-$('run').onclick = run; run();
+(function () {
+  'use strict';
+  var CK = window.RiceChecks, results = [];
+  try { var th = new URLSearchParams(location.search).get('theme'); if (th === 'light' || th === 'dark') document.documentElement.setAttribute('data-theme', th); } catch (e) {}
+  document.getElementById('theme').onclick = function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var dark = cur ? cur === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+  };
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function download(name, text) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function build() {
+    var g = document.getElementById('groups'), html = '';
+    Object.keys(CK.GROUPS).forEach(function (k) {
+      html += '<h2>' + k + ' · ' + esc(CK.GROUPS[k]) + '</h2><div class="tablewrap"><table><thead><tr><th>ID</th><th>Status</th><th>Check</th><th>Target</th><th>Result</th><th>Data</th></tr></thead><tbody>';
+      CK.CHECKS.filter(function (c) { return c.group === k; }).forEach(function (c) {
+        html += '<tr id="row-' + c.id + '"><td class="id">' + c.id + '</td><td><span class="chip WAIT">…</span></td><td>' + esc(c.name) + '</td><td class="tgt"></td><td class="det"></td><td></td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    g.innerHTML = html;
+  }
+  function fill(r) {
+    var tr = document.getElementById('row-' + r.id); if (!tr) return;
+    tr.children[1].innerHTML = '<span class="chip ' + r.status + '">' + r.status + '</span>';
+    tr.children[3].textContent = r.target || '';
+    tr.children[4].textContent = r.detail + '  (' + r.ms + ' ms)';
+    tr.children[5].innerHTML = r.csv ? '<button data-id="' + r.id + '">CSV</button>' : '';
+  }
+  function summary() {
+    var c = CK.counts(results);
+    document.getElementById('summary').innerHTML =
+      '<span class="chip PASS big">' + c.PASS + ' PASS</span><span class="chip INFO big">' + c.INFO + ' INFO</span><span class="chip ' + (c.FAIL ? 'FAIL' : 'PASS') + ' big">' + c.FAIL + ' FAIL</span>' +
+      '<span style="color:var(--muted);font-size:13px">' + results.length + ' of ' + CK.CHECKS.length + ' checks run</span>';
+  }
+  function run() {
+    results = []; build();
+    document.getElementById('summary').innerHTML = '<span class="chip WAIT big">running…</span>';
+    var i = 0;
+    (function next() {
+      if (i >= CK.CHECKS.length) { summary(); document.title = 'Checks: ' + CK.counts(results).FAIL + ' failed'; return; }
+      var r = CK.runOne(CK.CHECKS[i++]); results.push(r); fill(r); summary();
+      setTimeout(next, 0);
+    })();
+  }
+  document.getElementById('groups').addEventListener('click', function (e) {
+    var id = e.target && e.target.getAttribute('data-id'); if (!id) return;
+    var r = results.filter(function (q) { return q.id === id; })[0];
+    if (r && r.csv) download(CK.csvName(r), CK.toCSV(r.csv.header, r.csv.rows));
+  });
+  document.getElementById('rerun').onclick = run;
+  document.getElementById('dlsum').onclick = function () { download('checks_summary.csv', CK.summaryCSV(results)); };
+  document.getElementById('dlall').onclick = function () {
+    var t = '# checks_summary.csv\n' + CK.summaryCSV(results);
+    results.forEach(function (r) { if (r.csv) t += '\n# ' + CK.csvName(r) + '\n' + CK.toCSV(r.csv.header, r.csv.rows); });
+    download('checks_all.csv', t);
+  };
+  run();
+})();
 </script>
 </body>
 </html>

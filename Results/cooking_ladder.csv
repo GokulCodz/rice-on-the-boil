@@ -1,5 +1,0 @@
-level,description,t_core_gel_min,Xmean_end,R_end_over_R0
-1,"L1 · Textbook Fick: one constant D, fixed size, surface at the final water capacity from t = 0",6.208939,2.570768,1
-2,"L2 · + Starch state: water capacity and D change only where starch has gelatinized (needs heat and water)",6.442463,2.561124,1
-3,"L3 · + Swelling: shells grow as they take up water, so the grain boundary moves",11.25891,2.160484,1.518978
-4,"L4 · + Temperature: D follows an Arrhenius law with the local temperature",9.950881,2.24774,1.534448

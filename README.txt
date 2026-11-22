@@ -1,171 +1,217 @@
-RICE ON THE BOIL - Heat and water transport in cooking rice
-MS2280 Transport Phenomena in Materials Processing - Project choice 19
-=====================================================================
+RICE ON THE BOIL — heat and water transport when rice is soaked, heated and cooked
+==================================================================================
+MS2280 Transport Phenomena in Materials Processing — project files
 
-Group members (fill in):
-  1. Name ____________________  Roll number ____________
-  2. Name ____________________  Roll number ____________
-  3. Name ____________________  Roll number ____________
+Group:   [Name 1, roll no.]   [Name 2, roll no.]   [Name 3, roll no.]
+Date:    [submission date]
 
-
-1. WHAT IS IN THIS FOLDER
--------------------------
-Model/index.html        The interactive learning tool (open it in a browser). Seven guided stages.
-Model/physics.js        The physics engine: every number on the page is calculated here.
-Model/plots.js          Figure builder used both by the page and by the results script.
-Code/checks.html        Independent verification suite - open in a browser, runs in ~1 s.
-Code/checks.js          The same checks for the command line (macOS JavaScriptCore).
-Code/make_results.sh    Regenerates every figure and table in Results/ (macOS).
-Code/make_results.js    The script that make_results.sh runs.
-Code/analytical_check.py  Second-language cross-check (Python standard library only).
-Results/fig*.svg        Labelled figures for the report (open in any browser; insert into Word as SVG).
-Results/*.csv           Data behind every figure and every check.
-README.txt              This file.
-
-Still to be added by the group: Report.pdf + editable source, Video.mp4 (45 min),
-Video_Transcript.pdf, AI_Chats.pdf, AI_Declaration.pdf (signed), any kitchen
-recordings/photos (see section 7).
+One idea behind everything: cooking rice is two transport problems at once — heat
+into the grain and water into the grain. Heat is ~355× faster (Lewis number), so
+WATER transport sets the cooking time, and that time depends on size, shape,
+soaking, boiling point, rice type and the definition of "cooked". There is no
+universal cooking time.
 
 
-2. HOW TO OPEN THE MODEL (no installation, no internet)
--------------------------------------------------------
-Double-click Model/index.html (Chrome, Edge, Firefox or Safari). Keep the Model/
-folder together: index.html loads physics.js and plots.js from the same folder.
+1. FILE MAP
+-----------
+index.html                  Redirect to Model/index.html (for GitHub Pages / double-click).
+Model/index.html            The interactive learning tool (7 stages). HTML + CSS + UI JavaScript.
+                            Works offline from file://; no libraries, no CDN, no network.
+Model/physics.js            Physics engine (pure JS, no DOM). All equations and parameters.
+                            PARAMS lists every parameter with value, unit and source sentence.
+Model/plots.js              SVG figure builder (pure JS, no DOM): line/stacked/bar plots,
+                            colour maps, grain cross-section drawing.
+Code/checks.js              Verification suite: 33 checks in groups A–E (see §5).
+Code/checks.html            Runs checks.js in a browser: PASS/FAIL table + CSV downloads.
+Code/make_results.js        Regenerates every figure and table in Results/.
+Code/make_results.sh        Shell wrapper: runs make_results.js under macOS JavaScriptCore
+                            (jsc) and splits the output on "@@FILE name" markers with awk.
+Code/analytical_check.py    Independent Python (standard library only) series solutions,
+                            compared with the CSV tables in Results/ (20 cross-checks).
+Code/ui_selftest.js         Automated click-through of the page (loaded only with
+                            Model/index.html?selftest=1); used for the headless browser test.
+Results/                    fig01…fig09 (SVG) + a CSV for every figure, every check
+                            (check_A1.csv … check_E5.csv, checks_summary.csv) and
+                            key_results.csv (all headline numbers).
+README.txt                  This file.
 
-  * The timeline at the top moves between the seven stages:
-      1 Heat the pot   2 Into the grain   3 Soak   4 The race
-      5 Cook a grain   6 The whole pot    7 Verdict
-  * Each stage: "Predict first" card -> animated stage (press play, drag the time
-    scrubber) -> live readouts -> "What this shows" -> lab bench (presets, sliders,
-    model ladder) -> tabs: Plots | Balances & checks | Equations & assumptions |
-    Definitions & units | Questions, notes & trials.
-  * Every plot has SVG / PNG / CSV export buttons (for the report).
-  * "Notebook" (top right) exports predictions, notes, recorded trials and any
-    kitchen data as a text file.
-  * Useful links for the video: Model/index.html?theme=light#cook opens stage 5 in
-    the light theme (keys: pot, conduct, soak, race, cook, pot2, verdict).
-  * Labels on every scene say what is CALCULATED, ILLUSTRATIVE or OBSERVED.
+Every figure and scene is labelled CALCULATED (computed by physics.js), ILLUSTRATIVE
+(drawing/animation that only conveys an idea) or OBSERVED (your own kitchen data).
 
 
-3. HOW TO REPRODUCE THE RESULTS AND CHECKS
+2. HOW TO OPEN
+--------------
+Double-click Model/index.html (or the root index.html). Any current browser works
+(Chrome, Edge, Firefox, Safari). Nothing is downloaded; everything runs locally.
+
+  - Seven stages across the top: 1 Heat the pot · 2 Into the grain · 3 Soak ·
+    4 The race · 5 Cook a grain · 6 The whole pot · 7 Verdict.
+    The URL hash selects a stage, e.g. Model/index.html#cook.
+  - Each stage: "Predict first" → animated scene + Lab bench controls → 8 result tiles →
+    "What this shows" → Laws, equations & theorems → tabs (Plots, Balances & checks,
+    Model details & assumptions, Definitions & units with the PARAMS table,
+    Questions, notes & trials).
+  - Playback bar: play/pause (space bar), restart, scrubber with event markers, speed.
+  - Plots: hover for values; export each plot as SVG, PNG or CSV.
+  - Notebook (top bar): notes, predictions, trials and kitchen data are kept in this
+    browser (localStorage) and can be exported as a .txt file.
+  - Theme button, or ?theme=light / ?theme=dark in the URL.
+  - Checks button → Code/checks.html.
+
+
+3. HOW TO REPRODUCE
+-------------------
+(a) In a browser:   open Code/checks.html → 33 checks, expected 31 PASS, 2 INFO, 0 FAIL.
+
+(b) Terminal, macOS JavaScriptCore (ships with macOS; no install):
+      JSC=/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc
+      $JSC Model/physics.js Code/checks.js                 # prints the check table
+      $JSC Model/physics.js Code/checks.js -- --bundle     # prints the check CSVs
+      sh Code/make_results.sh                              # regenerates Results/ (≈ 1 s)
+
+(c) Independent Python cross-check (standard library only, after (b)):
+      python3 -I Code/analytical_check.py                  # expect: ALL CROSS-CHECKS PASSED (20)
+
+(d) Headless browser click-through of all 7 stages (optional; Chrome):
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+        --virtual-time-budget=400000 --dump-dom "file://$PWD/Model/index.html?selftest=1" \
+        | grep -o 'SELFTEST [A-Z]*: [0-9]* checks, [0-9]* failed'
+    Expected: SELFTEST PASS (≈ 2260 checks, 0 failed). It presses every preset, every
+    control option, the model ladder, play, scrubber, tabs, plot hover, kitchen panels,
+    predictions, trials and the notebook, and fails on any JS error or NaN.
+    Model/index.html?selftest=layout reports any element wider than the viewport
+    (used to check the 390 px phone layout).
+
+
+4. MODEL SUMMARY (science file stages 1–7)
 ------------------------------------------
-Any computer:  open Code/checks.html in a browser -> 33 checks run (expected: all
-               PASS or INFO, 0 FAIL). CSV tables can be downloaded from that page.
+Every equation is one conservation statement, d/dt∫C dV = −∮J·n dA + ∫S dV, plus a
+transport law (Fourier for heat, Fick for water). SI units; moisture X on a dry basis.
 
-macOS terminal, from this folder:
-   /System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc Model/physics.js Code/checks.js
-       -> prints the 33 checks
-   sh Code/make_results.sh
-       -> rewrites Results/ (16 figures, 14 tables) in about 1 s
-   python3 -I Code/analytical_check.py
-       -> independent series solutions in Python; expected "ALL CROSS-CHECKS PASSED"
+Stage 1  Heat the pot. Lumped energy and mass balance of water + pot;
+         T ≤ T_b(p) from Antoine (two coefficient sets) and the standard atmosphere;
+         Watson h_fg; Newton losses UA(T − T_amb); sub-boiling evaporation by the
+         heat–mass analogy. The boil-off is solved each step so energy closes exactly.
+Stage 2  Into the grain. Radial heat equation (sphere/cylinder/slab, equivalent size with
+         the grain's V/S) with a convective surface; Bi ≈ 5.6; water uptake off.
+Stage 3  Soak. Fick diffusion relative to the solid, j = −ρ_d D ∇X, surface at
+         X_nat = 0.40, Arrhenius D(T) (E_a = 32.5 kJ/mol), swelling; bath and grains as
+         two control volumes.
+Stage 4  The race. One full run; heat vs water at the centre; Le = α/D ≈ 355.
+Stage 5  Cook a grain. Finite volumes that follow the dry solid (moving boundary,
+         Reynolds transport theorem); swelling by volume additivity; first-order
+         gelatinization k_g(T) f(X) (1 − G); energy with water enthalpy and a
+         gelatinization sink; surface capacity X_nat + G_s (X_gel − X_nat);
+         D(T, G, X). Model ladder L1–L4.
+Stage 6  The whole pot. Stage 1 + stage 5 coupled: free water and N identical grains;
+         heater off and lid-on rest when the free water is gone.
+Stage 7  Verdict. Nine scenarios; criterion G* adjustable; comparison with R²/α and R²/D.
 
-Software: a web browser. Optional: macOS (built-in JavaScriptCore), Python 3.
-No packages, no internet. Code used: JavaScript (model, checks), Python (cross-check).
-
-
-4. THE MODEL IN ONE PAGE
-------------------------
-Control volumes
-  A  free liquid water in the pot (+ vessel), lumped temperature, boiling cap T <= T_b(p)
-  B  each rice grain: a control volume whose boundary MOVES (it swells)
-  Steam leaves A through the free surface.
-
-Grain (1D radial finite volumes that follow the dry solid; sphere/cylinder/slab
-with the grain's volume-to-surface ratio):
-  water   d(rho_d X)/dt = -div j,  j = -rho_d D grad X   (flux relative to the solid;
-          follows from the slides' j_A = -rho D grad w_A with w = X/(1+X))
-  energy  conduction + enthalpy carried by water - gelatinization enthalpy
-  starch  dG/dt = k_g(T) f(X) (1 - G)   (needs T > ~68 C AND enough water)
-  surface X = X_nat + G_s (X_gel - X_nat);  -k dT/dr = h (T - T_water)
-  swelling shell volume = m_s (1/rho_s + X/rho_w)   (volume additivity)
-  D = [D_nat(1-G) + D_gel G] exp[-Ea/R (1/T - 1/T_ref)]
-Pot: d/dt[(M c_w + C_v)T] = P - UA(T - T_amb) - N(Q_g + m_g c_w T) - m_ev(c_w T + h_fg)
-Model ladder (stage 5): L1 textbook Fick -> L2 + starch state -> L3 + swelling -> L4 + D(T).
-
-Main parameters and sources (all listed with units in the page, tab "Definitions & units")
-  D_nat = 3.6e-10, D_gel = 2.8e-10 m2/s   Briffaz et al. (2014) J. Food Eng. 121:143-151
-  Ea = 32.5 kJ/mol                        Bello et al. (rice soaking, swelling sphere)
-  brown rice D x 0.58                     Briffaz et al. (2014) J. Food Eng. 141:99-106
-  k, c of solid                           Choi & Okos (1986) composition model
-  X0 = 0.14, X_nat = 0.40, X_gel = 2.6 kg/kg dry basis; T_on = 68 C;
-  k_g = 0.05 1/s at 95 C, E_g = 120 kJ/mol; f(X) ramps 0.30 -> 0.80
-                                          illustrative, inside ranges of Lund (1984), Donovan (1979)
-  Boiling point: Antoine equation + standard atmosphere; latent heat: Watson correlation.
-The model is NOT fitted to cooking-time data.
+Numerics: 60 radial shells; implicit (backward Euler) water and energy steps with
+tridiagonal (Thomas) solves; exact first-order gelatinization update; adaptive time
+step Δt = clamp(0.02 t, 2 ms, Δt_max). Water, energy and dry solid are conserved to
+round-off (residuals ~1e-13 relative).
 
 
-5. KEY RESULTS (all reproducible with section 3)
-------------------------------------------------
-  * Heat is fast: a medium grain's centre is within 1 K of boiling water after 8.6 s
-    (R^2/alpha = 11.8 s; Bi = h R / k = 5.6 with h = 1500 W/m2K, so a lumped model is not valid).
-  * Water is slow: Lewis number alpha/D ~ 355; the centre water front needs minutes.
-  * Soaking at 25 C: mean X = 0.354 kg/kg after 2 h (26 % wet basis); time scales with R^2
-    (curves for three grain sizes collapse when plotted against Fo = Dt/R^2).
-  * Cooking (L4, medium grain, unsoaked, 100 C): core gelatinized (G >= 0.9) after 10.0 min;
-    radius grows to 1.53 R0 (volume x 3.6); mean moisture ~ 2.2-2.5 kg/kg (69-72 % wb).
-  * Which assumption matters (core time): L1 6.2 min, L2 6.4, L3 11.3 (swelling!), L4 10.0.
-  * No universal cooking time: 5.0 min (pressure cooker, 120 C) to 16.2 min (brown rice);
-    3000 m (90 C) 14.8; short bold 13.3; long slender 8.4; presoak 30 min 9.2, 2 h 7.5;
-    same grain as a cylinder 7.1. R^2/alpha is 18-180 x too short.
-  * Absorption method (200 g rice, 400 g water, lid on, 300 W simmer): 371 g ends up in the
-    rice, 29 g as steam; core done at 11.7 min, free water gone at 32.1 min.
+5. KEY RESULTS (Results/key_results.csv; science-file value in brackets)
+------------------------------------------------------------------------
+Boiling point: sea level 100.0 °C · 3000 m 90.0 °C · pressure cooker 120.5 °C   [same]
+Medium grain: equivalent sphere R = 1.163 mm, Bi = 5.61, R²/α = 11.8 s           [same]
+Heat only: centre within 1 K of boiling water after ≈ 8.4–8.6 s                  [≈ 8.6 s]
+Soak 25 °C: ⟨X⟩ = 0.269 at 30 min, 0.354 at 2 h, R/R0 = 1.089 after 3 h         [0.27, 0.354, 1.09]
+D(25 °C) = 2.98e-11, D(45 °C) = 6.8e-11 m²/s                                    [same; reported ≈ 8.8e-11]
+Le = α/D_gel(100 °C) = 355; water-50 % / heat-99 % at the centre = 161           [≈ 355, ≈ 160]
+Model ladder (medium, 100 °C, G_c ≥ 0.9): L1 6.2 · L2 6.4 · L3 11.3 · L4 9.95 min [6.2, 6.4, 11.3, 10.0]
+Presoak 30 min → 9.19 min (−8 %); 2 h → 7.53 min                                [9.2]
+Cooked grain (25 min): R/R0 = 1.51, volume ×3.5                                 [×1.53, ×3.6]
+Whole pot (200 g rice, 400 g water, 1500 W → 300 W, lid on): 371 g into rice,
+  29 g steam, centre cooked at 11.7 min, free water gone at 32.1 min             [same]
+Scenarios (L4, min): base 9.95 · presoak 30 min 9.19 · presoak 2 h 7.53 ·
+  long slender 8.40 · short bold 13.28 · 3000 m 14.76 · pressure cooker 5.00 ·
+  brown 16.14 · cylinder 7.11 → 5.0 to 16.1 min; R²/α is too short by 25–82×     [5.0–16.2]
 
-Independent checks (Code/checks.html, 33 checks, 0 failures):
-  A  model vs exact series: heat (convective sphere) and water uptake (sphere, cylinder,
-     slab) agree within 0.0012; early-time sqrt(t) law; grid convergence order 1.8.
-  B  water, energy, dry solid and volume conserved to 1e-13 relative or better,
-     for one grain and for the whole pot.
-  C  limits: Bi -> infinity, Bi -> 0 (lumped), boiling points 100.0 / 90.0 / 120.5 C,
-     equilibrium stays at equilibrium, D = 0 gives no uptake.
-  D  scaling: constant-D time ~ R^2.00; Peclet number of water-carried enthalpy 0.04
-     (conduction dominates); gelatinization enthalpy ~1 % of energy absorbed;
-     halving grid and time step changes the core time by 0.1 %.
-  E  sources: D(45 C) = 6.8e-11 vs ~8.8e-11 m2/s reported for white rice soaking;
-     core time 10 min vs ~15 min glass-plate cooking times (same order, not fitted).
+Small differences from the science file: the centre-within-1 K time depends slightly
+on the time step (8.4 s with Δt ≤ 0.01 s, 8.5–8.6 s with larger steps); the
+Péclet number of water-carried enthalpy computed from the run is ≈ 0.02 (the science
+file quotes ≈ 0.04) — both are ≪ 0.1, so the conclusion "conduction dominates" holds.
 
 
-6. LIMITATIONS AND HONEST DISCREPANCIES (discuss in the report)
----------------------------------------------------------------
-  * 1D equivalent geometry; sphere vs cylinder for the same grain differ by ~30 %.
-  * Model core time (~10 min) is shorter than typical glass-plate cooking times (~15 min).
-  * Presoaking shortens the model's core time less than several studies report
-    (e.g. 30 min soak: -8 % here). Candidate reasons, testable in stage 5: soaking cracks,
-    D rising with moisture (slider b), or a lower water need for the core to turn translucent.
-  * Not modelled: cracks/fissures, leaching of amylose, further slow uptake after cooking,
-    grain-to-grain spread, pot stratification and hot-base contact, retrogradation.
-  * Illustrative parameters (T_on, k_g, E_g, X_gel, f(X) limits, h, UA, k_m) are within
-    published ranges but not measured for one variety.
+6. INDEPENDENT CHECKS
+---------------------
+Code/checks.js (33):  A numerics vs analytical solutions (Carslaw–Jaeger Bi = 1, 10;
+  Crank sphere/cylinder/slab; √t law; grid order 1.94) · B exact conservation (grain
+  water, energy, dry solid, volume additivity; pot; pot + rice) · C limits (Bi → ∞,
+  Bi → 0 lumped, T_b at three pressures, equilibrium stays, D = 0) · D scaling (R²
+  exponent 2.000, full-model exponent 1.75 INFO, Le INFO, Péclet, gelatinization
+  enthalpy, resolution: halving Δr and Δt changes the core time by 0.15 %) ·
+  E published values not used for fitting (D(45 °C), soaking plateau, glass-plate
+  range, presoak monotonic, centre heating time).
+Code/analytical_check.py (20): series solutions and Antoine written again in Python
+  and compared with the Results/ CSVs; water and energy closure recomputed from CSV
+  columns.
 
 
-7. OPTIONAL KITCHEN CHECK (OBSERVED data; panels are inside stages 3 and 5)
---------------------------------------------------------------------------
-  Soaking: weigh ~20 g raw rice; soak; at 5, 10, 15, 20, 30, 45, 60, 90, 120 min drain,
-  blot 30 s, weigh, return. Enter (time, mass) in stage 3 -> X = (m/m0)(1+X0) - 1 is
-  plotted on the model curve; "Fit D to my data" compares your D with the model/literature.
-  Cooking (glass-plate, ISO 14864): every 2 min press 10 grains between glass plates and
-  count white cores; enter % in stage 5; compare the 10 % time with the model.
-  Keep raw photos/videos and a table of readings in Results/ (label them OBSERVED).
+7. LIMITATIONS (stated honestly)
+--------------------------------
+- 1D equivalent geometry: sphere vs cylinder of the same grain differ by ≈ 30 %.
+- Model core time ≈ 10 min vs ≈ 15 min in glass-plate tests (ISO 14864).
+- Presoaking helps less in the model (−8 % for 30 min) than cooks report; missing
+  physics: cracks, D rising with moisture (slider b), translucency before full
+  gelatinization.
+- Not modelled: leaching of solids, further slow uptake, grain-to-grain spread,
+  temperature stratification, hot-base contact, retrogradation, condensate dripping
+  back from the lid.
+- Illustrative parameters (inside published ranges, not measured for one variety):
+  T_on, k_g, E_g, X_gel, f(X) limits, h, UA, k_m.
+- Lid: in the lumped pot the lid acts through lower UA and k_m. At full power the open
+  pot boils off slightly LESS (more heat leaks to the kitchen); the lid saves water
+  because it lets a small simmer power hold the boil (open pot at 300 W falls off the
+  boil and the rice does not cook — stage 6).
 
 
-8. SUGGESTED VIDEO PLAN (45 min, ~15 min each)
-----------------------------------------------
-  Member 1 (heat): stage 1 (temperature vs stored energy vs heat rate; boiling cap,
-    altitude, pressure cooker), stage 2 (Biot number, lumped vs spatial, series check),
-    stage 4 first half (why heat is not the slow step).
-  Member 2 (water): stage 3 (Fick, sqrt(t), R^2 scaling, two control volumes), stage 4
-    second half (Le, where the analogy fails), kitchen soaking check, Code/checks.html.
-  Member 3 (cooking): stage 5 (gelatinization, swelling, moving boundary, model ladder),
-    stage 6 (water and energy ledgers, absorption method), stage 7 (no universal time),
-    limitations.
+8. OPTIONAL KITCHEN CHECK (OBSERVED data; panels in stages 3 and 5)
+-------------------------------------------------------------------
+Soaking (stage 3): weigh ≈ 20 g raw rice (m0). Soak in water at room temperature
+(note T). At 10, 20, 30, 60, 90, 120 min: drain, blot on a towel for 30 s, weigh (m),
+return to the water. Enter t and m; the page computes X = (m/m0)(1 + X0) − 1, plots
+the points over the model and "Fit D" fits D (and the plateau) with the sphere series.
+Glass-plate test (stage 5, after ISO 14864): bring water to a rolling boil, add rice.
+From 6 min, every minute take 2–3 grains, squash them between two glass plates and
+estimate the width of the white core as a % of the grain width. The points appear on
+the "core" plot. Record water temperature/altitude, rice variety and whether presoaked.
+Safety: boiling water — use tongs/spoon and a heat-proof surface.
 
 
-9. AI USE (for the group's AI declaration)
-------------------------------------------
-The code, figures and this README were produced with the help of an AI assistant
-(Claude, Anthropic) on 17 Nov 2026, working from the course slides and the project
-brief. Every result was checked by the independent checks listed above (analytical
-solutions, conservation residuals, limiting cases, second-language cross-check) and
-the parameter values were traced to the cited sources. The group must still include
-the full chat transcripts (AI_Chats.pdf) and a signed declaration, and should verify
-the cited papers themselves before submission.
+9. VIDEO PLAN (3 parts × 15 min; adjust to the brief's limit)
+--------------------------------------------------------------
+Part 1 — The question and the pot (0–15 min)
+  0:00  The brief and the one idea: heat vs water (open the tool, journey stepper).
+  2:00  Stage 1: temperature vs energy vs rate; boiling cap; Clausius–Clapeyron;
+        lid / simmer / Leh / pressure cooker (presets); energy balance closing.
+  8:00  Stage 2: Biot number, centre lag, lumped model fails, but only for seconds.
+ 13:00  Show checks A1–A2, C1–C2 in Code/checks.html.
+Part 2 — Water decides (15–30 min)
+  0:00  Stage 3: soaking, √t, Fo collapse, Arrhenius; two control volumes;
+        kitchen soaking data and "Fit D".
+  6:00  Stage 4: the race on log time; Le ≈ 355; similar form ≠ same physics.
+  9:00  Stage 5: gelatinization, swelling, model ladder L1–L4, presoak, brown rice;
+        glass-plate comparison; limitations.
+Part 3 — The pot and the verdict (30–45 min)
+  0:00  Stage 6: where the water goes; too little water; lid off at a simmer.
+  6:00  Stage 7: nine scenarios, G* slider, R²/α vs R²/D vs model; answer the brief.
+ 10:00  Reproducibility: make_results.sh, analytical_check.py, Results/, limitations.
+ 13:00  AI-use statement and contributions.
+Every on-screen visual keeps its CALCULATED / ILLUSTRATIVE / OBSERVED tag.
+
+
+10. AI-USE NOTE
+---------------
+The physics engine, verification suite, plotting code, page and this README were
+drafted with an AI coding assistant (Anthropic Claude, via Claude Code) from the
+group's science file ("Rice on the boil — science brief"), which fixed all equations,
+parameter values and sources. The group [describe: reviewed the equations against the
+course slides and textbook, ran the checks, chose the parameters, wrote the
+explanations / recorded the video …]. All numbers in the page and in Results/ are
+reproduced by Code/checks.js (33 checks) and the independent Code/analytical_check.py.
+The idea of a guided, stage-by-stage investigation follows the course's continuity
+tool; the design and code are original.

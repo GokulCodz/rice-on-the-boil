@@ -1,271 +1,507 @@
-/* =====================================================================
-   Rice on the Boil — SVG figure builder (no DOM; returns SVG strings).
-   Used by the interactive page and by Code/make_results.js so that the
-   figures in Results/ come from the same code as the figures on screen.
-   ===================================================================== */
+/* =============================================================================
+   Rice on the Boil — SVG figure builder (plots.js)
+   Pure string building, no DOM. Exposes window.RicePlots and module.exports.
+   Every figure carries a CALCULATED / ILLUSTRATIVE / OBSERVED tag.
+   ============================================================================= */
 (function (root) {
-'use strict';
+  'use strict';
 
-const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-const THEMES = {
-  light: { bg: '#fffdf8', ink: '#2b2622', muted: '#776b5f', grid: '#ece4d6', axis: '#b5a893', panel: '#f6f0e4',
-    series: ['#b8700f', '#2f7fb5', '#c2412d', '#4f8a3c', '#8a4f8a', '#4c5b6a'] },
-  dark:  { bg: '#1f1c19', ink: '#efe7da', muted: '#a99d8f', grid: '#34302b', axis: '#5e554b', panel: '#28241f',
-    series: ['#e6a23c', '#6db3e3', '#ef7a62', '#86c26f', '#c58ac5', '#a3b3c2'] }
-};
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const n2 = v => (Math.round(v * 100) / 100);
+  var THEMES = {
+    light: { name: 'light', bg: '#fffdf8', ink: '#2b2622', muted: '#776b5f', grid: '#ece4d6', axis: '#b5a893',
+      panel: '#f7f1e6', series: ['#b8700f', '#2f7fb5', '#c2412d', '#4f8a3c', '#8a4f8a', '#4c5b6a'],
+      tag: { CALCULATED: '#b8700f', ILLUSTRATIVE: '#2f7fb5', OBSERVED: '#4f8a3c' } },
+    dark: { name: 'dark', bg: '#1f1c19', ink: '#efe7da', muted: '#a89c8c', grid: '#36302a', axis: '#6e6356',
+      panel: '#2a2622', series: ['#e3a040', '#5fa8dc', '#ec7059', '#7cba66', '#bd84bd', '#97a7b6'],
+      tag: { CALCULATED: '#e3a040', ILLUSTRATIVE: '#5fa8dc', OBSERVED: '#7cba66' } }
+  };
+  function theme(t) { return typeof t === 'object' && t ? t : (THEMES[t] || THEMES.light); }
 
-/* ---------- colour maps ---------- */
-function lerpColor(stops, t) {
-  t = Math.min(1, Math.max(0, t));
-  const k = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(k)), f = k - i;
-  const a = hex(stops[i]), b = hex(stops[i + 1]);
-  return '#' + [0, 1, 2].map(j => Math.round(a[j] + (b[j] - a[j]) * f).toString(16).padStart(2, '0')).join('');
-}
-function hex(c) { c = c.replace('#', ''); return [0, 2, 4].map(i => parseInt(c.slice(i, i + 2), 16)); }
-const CMAPS = {
-  heat: ['#24306e', '#563b9a', '#9b3d8e', '#d2524a', '#f08a2c', '#f9d45c'],          // cool → hot
-  moisture: ['#f1e4c6', '#d5dcb4', '#9fcbbf', '#5aa5bd', '#2e75a8', '#1d4677'],      // dry → wet
-  gel: ['#ffffff', '#ffffff']
-};
-function colorFor(cmap, v, vmin, vmax) { return lerpColor(CMAPS[cmap], (v - vmin) / (vmax - vmin)); }
-/* moisture is shown on a wet-basis scale (w = X/(1+X)) so that the dry and soaked range stays readable */
-function moistColor(X) { const w = X / (1 + X); return lerpColor(CMAPS.moisture, (w - 0.10) / (0.75 - 0.10)); }
-function heatColor(T, Tmin, Tmax) { return lerpColor(CMAPS.heat, (T - Tmin) / (Tmax - Tmin)); }
+  var HEAT = ['#24306e', '#563b9a', '#9b3d8e', '#d2524a', '#f08a2c', '#f9d45c'];
+  var MOIST = ['#f1e4c6', '#d5dcb4', '#9fcbbf', '#5aa5bd', '#2e75a8', '#1d4677'];
+  var FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  var SERIF = "'Iowan Old Style', Palatino, 'Palatino Linotype', Georgia, serif";
 
-/* ---------- ticks ---------- */
-function niceTicks(a, b, n) {
-  if (!(b > a)) { b = a + 1; }
-  const span = b - a, step0 = span / (n || 5), mag = Math.pow(10, Math.floor(Math.log10(step0)));
-  const err = step0 / mag, step = (err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1) * mag;
-  const t = []; for (let v = Math.ceil(a / step - 1e-9) * step; v <= b + step * 1e-9; v += step) t.push(Math.abs(v) < step * 1e-9 ? 0 : v);
-  return t;
-}
-function fmtTick(v) {
-  const a = Math.abs(v);
-  if (a === 0) return '0';
-  if (a >= 1e4 || a < 1e-3) { const e = Math.floor(Math.log10(a)), m = v / Math.pow(10, e); return (Math.abs(m - 1) < 1e-9 ? '' : (+m.toFixed(1)) + '×') + '10' + sup(e); }
-  return String(+v.toPrecision(4));
-}
-function sup(e) { const m = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' }; return String(e).split('').map(c => m[c]).join(''); }
+  function esc(s) {
+    return String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function hex2rgb(h) { h = h.replace('#', ''); return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)]; }
+  function rgb2hex(c) { return '#' + c.map(function (v) { v = Math.round(Math.max(0, Math.min(255, v))); return (v < 16 ? '0' : '') + v.toString(16); }).join(''); }
+  function lerpColor(a, b, f) { var A = hex2rgb(a), B = hex2rgb(b); return rgb2hex([0, 1, 2].map(function (i) { return A[i] + (B[i] - A[i]) * f; })); }
+  function rampColor(stops, f) {
+    if (!isFinite(f)) f = 0;
+    f = Math.max(0, Math.min(1, f)) * (stops.length - 1);
+    var i = Math.min(Math.floor(f), stops.length - 2);
+    return lerpColor(stops[i], stops[i + 1], f - i);
+  }
+  /* sequential colours for time snapshots (early → late) */
+  var SEQ = { light: ['#e0a63a', '#c8572a', '#9b3d6e', '#5b3f8c', '#24477a'], dark: ['#f2c063', '#ee7d4e', '#d36aa0', '#9b86d6', '#6fa3dc'] };
+  function seqColors(n, t) { var st = SEQ[theme(t).name] || SEQ.light; var o = []; for (var i = 0; i < n; i++) o.push(rampColor(st, n > 1 ? i / (n - 1) : 0)); return o; }
+  function heatColor(T, Tmin, Tmax) { return rampColor(HEAT, (T - Tmin) / (Tmax - Tmin)); }
+  /* moisture map on WET BASIS, 10–75 % */
+  function wetBasis(X) { return X / (1 + X); }
+  function moistureColor(X) { return rampColor(MOIST, (wetBasis(X) - 0.10) / (0.75 - 0.10)); }
 
-/* ---------- line plot ----------
-   o: {w, h, title, xLabel, yLabel, xLog, yLog, xMin, xMax, yMin, yMax, series:[{name, x, y, color, width, dash, area, points, opacity}],
-       vlines:[{x, label, color, dash}], hlines:[{y, label, color, dash}], cursorX, legend: 'top'|'right'|false, theme, note, id} */
-function linePlot(o) {
-  const th = THEMES[o.theme || 'light'], W = o.w || 640, H = o.h || 300;
-  const legendRight = o.legend === 'right';
-  const m = { l: 62, r: legendRight ? legendWidth(o.series) : 20, t: o.title ? 34 : 16, b: o.note ? 58 : 46 };
-  const pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const all = (key) => o.series.flatMap(s => s[key].filter((v, i) => v != null && isFinite(v) && s.y[i] != null && isFinite(s.y[i]) && s.x[i] != null && isFinite(s.x[i])));
-  let xMin = o.xMin, xMax = o.xMax, yMin = o.yMin, yMax = o.yMax;
-  const xs = all('x'), ys = all('y');
-  if (xMin == null) xMin = Math.min(...xs); if (xMax == null) xMax = Math.max(...xs);
-  if (yMin == null) yMin = Math.min(...ys); if (yMax == null) yMax = Math.max(...ys);
-  if (!(xMax > xMin)) xMax = xMin + 1; if (!(yMax > yMin)) { yMax = yMin + 1; }
-  if (o.yPad !== false && o.yMin == null) { const pad = (yMax - yMin) * 0.06; yMin -= pad; yMax += pad; }
-  const lx = v => Math.log10(Math.max(v, 1e-300));
-  const sx = o.xLog ? v => m.l + pw * (lx(v) - lx(xMin)) / (lx(xMax) - lx(xMin)) : v => m.l + pw * (v - xMin) / (xMax - xMin);
-  const sy = o.yLog ? v => m.t + ph * (1 - (lx(v) - lx(yMin)) / (lx(yMax) - lx(yMin))) : v => m.t + ph * (1 - (v - yMin) / (yMax - yMin));
-  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${FONT}" role="img" aria-label="${esc(o.title || o.yLabel || 'plot')}"` +
-    ` data-plot='${JSON.stringify({ l: m.l, t: m.t, pw, ph, xMin, xMax, yMin, yMax, xLog: !!o.xLog, yLog: !!o.yLog, W, H })}'>`;
-  s += `<rect x="0" y="0" width="${W}" height="${H}" fill="${th.bg}"/>`;
-  if (o.title) s += `<text x="${m.l}" y="20" font-size="14" font-weight="600" fill="${th.ink}">${esc(o.title)}</text>`;
-  // grid + ticks
-  const xt = o.xLog ? logTicks(xMin, xMax) : niceTicks(xMin, xMax, Math.max(3, Math.round(pw / 90)));
-  const yt = o.yLog ? logTicks(yMin, yMax) : niceTicks(yMin, yMax, Math.max(3, Math.round(ph / 55)));
-  s += `<g font-size="11" fill="${th.muted}">`;
-  for (const v of xt) { const X = n2(sx(v)); if (X < m.l - 0.5 || X > m.l + pw + 0.5) continue; s += `<line x1="${X}" y1="${m.t}" x2="${X}" y2="${m.t + ph}" stroke="${th.grid}"/><text x="${X}" y="${m.t + ph + 16}" text-anchor="middle">${fmtTick(v)}</text>`; }
-  for (const v of yt) { const Y = n2(sy(v)); if (Y < m.t - 0.5 || Y > m.t + ph + 0.5) continue; s += `<line x1="${m.l}" y1="${Y}" x2="${m.l + pw}" y2="${Y}" stroke="${th.grid}"/><text x="${m.l - 7}" y="${Y + 4}" text-anchor="end">${fmtTick(v)}</text>`; }
-  s += `</g><rect x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="none" stroke="${th.axis}"/>`;
-  if (o.xLabel) s += `<text x="${m.l + pw / 2}" y="${m.t + ph + 36}" font-size="12" text-anchor="middle" fill="${th.ink}">${esc(o.xLabel)}</text>`;
-  if (o.yLabel) s += `<text transform="translate(16 ${m.t + ph / 2}) rotate(-90)" font-size="12" text-anchor="middle" fill="${th.ink}">${esc(o.yLabel)}</text>`;
-  if (o.note) s += `<text x="${m.l}" y="${H - 8}" font-size="10.5" fill="${th.muted}">${esc(o.note)}</text>`;
-  s += `<defs><clipPath id="cp-${o.id || 'p'}"><rect x="${m.l}" y="${m.t}" width="${pw}" height="${ph}"/></clipPath></defs><g clip-path="url(#cp-${o.id || 'p'})">`;
-  // horizontal / vertical guide lines
-  for (const hl of o.hlines || []) { const Y = n2(sy(hl.y)); s += `<line x1="${m.l}" y1="${Y}" x2="${m.l + pw}" y2="${Y}" stroke="${hl.color || th.muted}" stroke-dasharray="${hl.dash || '5 4'}" stroke-width="1.2"/>` + (hl.label ? `<text x="${m.l + pw - 6}" y="${Y - 5}" font-size="10.5" text-anchor="end" fill="${hl.color || th.muted}">${esc(hl.label)}</text>` : ''); }
-  // series
-  o.series.forEach((se, k) => {
-    const col = se.color || th.series[k % th.series.length];
-    const segs = []; let cur = [];
-    for (let i = 0; i < se.x.length; i++) {
-      const ok = se.x[i] != null && se.y[i] != null && isFinite(se.x[i]) && isFinite(se.y[i]) && (!o.xLog || se.x[i] > 0) && (!o.yLog || se.y[i] > 0);
-      if (ok) cur.push([n2(sx(se.x[i])), n2(sy(se.y[i]))]); else if (cur.length) { segs.push(cur); cur = []; }
+  function fmt(v) {
+    if (v === 0) return '0';
+    var a = Math.abs(v);
+    if (a >= 1e5 || a < 1e-3) { var e = Math.floor(Math.log10(a)), m = v / Math.pow(10, e); return (Math.abs(m - Math.round(m)) < 1e-9 ? Math.round(m) : m.toFixed(1)) + 'e' + e; }
+    var s = a >= 100 ? v.toFixed(0) : a >= 10 ? v.toFixed(1) : a >= 1 ? v.toFixed(2) : v.toFixed(3);
+    if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+    return s;
+  }
+  function niceStep(span, n) {
+    var raw = span / Math.max(n, 1), mag = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / mag;
+    return (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * mag;
+  }
+  function niceTicks(a, b, n) {
+    if (!(b > a)) { b = a + 1; }
+    var st = niceStep(b - a, n || 5), t = [], v = Math.ceil(a / st - 1e-9) * st;
+    for (; v <= b + st * 1e-9; v += st) t.push(Math.abs(v) < st * 1e-9 ? 0 : +v.toPrecision(12));
+    return t;
+  }
+  function logTicks(a, b) {
+    var t = [], e0 = Math.floor(Math.log10(a)), e1 = Math.ceil(Math.log10(b)), dec = e1 - e0;
+    for (var e = e0; e <= e1; e++) {
+      var mult = dec <= 2 ? [1, 2, 5] : dec <= 4 ? [1, 3] : [1];
+      mult.forEach(function (m) { var v = m * Math.pow(10, e); if (v >= a * (1 - 1e-9) && v <= b * (1 + 1e-9)) t.push(v); });
     }
-    if (cur.length) segs.push(cur);
-    if (se.area) for (const g of segs) s += `<path d="M${g[0][0]},${n2(sy(Math.max(yMin, se.areaBase || 0)))}L${g.map(p => p.join(',')).join('L')}L${g[g.length - 1][0]},${n2(sy(Math.max(yMin, se.areaBase || 0)))}Z" fill="${col}" opacity="${se.areaOpacity || 0.15}"/>`;
-    if (!se.points || se.line) for (const g of segs) s += `<polyline points="${g.map(p => p.join(',')).join(' ')}" fill="none" stroke="${col}" stroke-width="${se.width || 2}" ${se.dash ? `stroke-dasharray="${se.dash}"` : ''} stroke-linejoin="round" stroke-linecap="round" opacity="${se.opacity || 1}"/>`;
-    if (se.points) for (const g of segs) for (const p of g) s += se.points === 'square' ? `<rect x="${p[0] - 4}" y="${p[1] - 4}" width="8" height="8" fill="${th.bg}" stroke="${col}" stroke-width="2"/>` : `<circle cx="${p[0]}" cy="${p[1]}" r="${se.r || 3.6}" fill="${se.hollow ? th.bg : col}" stroke="${col}" stroke-width="1.6"/>`;
-  });
-  for (const vl of o.vlines || []) { if (vl.x == null || !isFinite(vl.x) || (o.xLog && vl.x <= 0)) continue; const X = n2(sx(vl.x)); s += `<line x1="${X}" y1="${m.t}" x2="${X}" y2="${m.t + ph}" stroke="${vl.color || th.muted}" stroke-dasharray="${vl.dash || '4 4'}" stroke-width="1.3"/>` + (vl.label ? `<text x="${X > m.l + pw - 90 ? X - 4 : X + 4}" ${X > m.l + pw - 90 ? 'text-anchor="end"' : ''} y="${vl.top ? m.t + 12 + (vl.row || 0) * 13 : m.t + ph - 7 - (vl.row || 0) * 13}" font-size="10.5" fill="${vl.color || th.muted}" paint-order="stroke" stroke="${th.bg}" stroke-width="3">${esc(vl.label)}</text>` : ''); }
-  if (o.cursorX != null && isFinite(o.cursorX)) { const X = n2(sx(o.cursorX)); s += `<line x1="${X}" y1="${m.t}" x2="${X}" y2="${m.t + ph}" stroke="${th.ink}" stroke-width="1" opacity=".55"/>`; }
-  s += `</g>`;
-  // legend
-  if (o.legend !== false) {
-    const items = o.series.filter(se => se.name);
-    if (legendRight) {
-      items.forEach((se, k) => { const y = m.t + 8 + k * 18, col = se.color || th.series[o.series.indexOf(se) % th.series.length]; s += legendKey(m.l + pw + 12, y, col, se, th) + `<text x="${m.l + pw + 40}" y="${y + 4}" font-size="11" fill="${th.ink}">${esc(se.name)}</text>`; });
+    return t;
+  }
+  function wrap(text, maxChars) {
+    var words = String(text).split(/\s+/), lines = [], cur = '';
+    words.forEach(function (w) {
+      if ((cur + ' ' + w).trim().length > maxChars && cur) { lines.push(cur); cur = w; }
+      else cur = (cur + ' ' + w).trim();
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  function textW(s, size) { return String(s).length * (size || 12) * 0.56; }
+  var uid = 0;
+  function nextId(p) { uid++; return (p || 'rp') + uid; }
+
+  function svgOpen(w, h, th, extra) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h +
+      '" font-family="' + esc(FONT) + '" ' + (extra || '') + '><rect width="' + w + '" height="' + h + '" fill="' + th.bg + '"/>';
+  }
+  function tagBadge(x, y, tag, th, anchorRight) {
+    if (!tag) return '';
+    var c = th.tag[tag] || th.muted, w = String(tag).length * 7.4 + 16;
+    var x0 = anchorRight ? x - w : x;
+    return '<g class="tag"><rect x="' + x0 + '" y="' + y + '" width="' + w + '" height="17" rx="8.5" fill="none" stroke="' + c +
+      '" stroke-width="1.2"/><text x="' + (x0 + w / 2) + '" y="' + (y + 12) + '" font-size="10" font-weight="700" letter-spacing="0.06em" fill="' + c +
+      '" text-anchor="middle">' + esc(tag) + '</text></g>';
+  }
+  function titleText(t, x, avail, th) {
+    var size = Math.max(11, Math.min(15, avail / (String(t).length * 0.52)));
+    return '<text x="' + x + '" y="22" font-family="' + esc(SERIF) + '" font-size="' + size.toFixed(1) + '" font-weight="600" fill="' + th.ink + '">' + esc(t) + '</text>';
+  }
+  function halo(th) { return ' stroke="' + th.bg + '" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round"'; }
+  function decimate(x, y, n) {
+    var L = x.length; if (L <= n) return { x: x.slice(), y: y.slice() };
+    var ox = [], oy = [], st = (L - 1) / (n - 1);
+    for (var i = 0; i < n; i++) { var k = Math.round(i * st); ox.push(x[k]); oy.push(y[k]); }
+    return { x: ox, y: oy };
+  }
+
+  /* ---------- axes frame shared by line and stacked plots ---------- */
+  function frame(spec, th) {
+    var W = spec.width || 640, H = spec.height || 360;
+    var legendRight = spec.legend === 'right';
+    var names = (spec.series || spec.layers || []).filter(function (s) { return s.name && !s.noLegend; }).map(function (s) { return s.name; });
+    if (spec.overlay && spec.overlay.name) names.push(spec.overlay.name);
+    var lw = legendRight ? Math.min(220, Math.max.apply(null, names.map(function (n) { return textW(n, 11); }).concat([40])) + 34) : 0;
+    var ml = spec.ml || 62, mr = (spec.mr || 18) + lw, mt = spec.title ? 42 : 30, mb = spec.note ? 78 : 46;
+    var legendRows = 0, legendItems = [];
+    if (spec.legend !== 'none' && !legendRight && names.length) {
+      var avail = W - ml - mr - 16, xx = 0, row = 0;
+      names.forEach(function (n) {
+        var w = textW(n, 11) + 30;
+        if (xx + w > avail && xx > 0) { row++; xx = 0; }
+        legendItems.push({ name: n, x: xx, row: row }); xx += w;
+      });
+      legendRows = row + 1;
+      mt += legendRows * 17 + 10;
+    }
+    return { W: W, H: H, ml: ml, mr: mr, mt: mt, mb: mb, x0: ml, x1: W - mr, y0: mt, y1: H - mb, lw: lw, legendItems: legendItems, legendRows: legendRows };
+  }
+  function scaler(lo, hi, p0, p1, log) {
+    if (log) { var a = Math.log10(lo), b = Math.log10(hi); return function (v) { return p0 + (Math.log10(Math.max(v, 1e-300)) - a) / (b - a) * (p1 - p0); }; }
+    return function (v) { return p0 + (v - lo) / (hi - lo) * (p1 - p0); };
+  }
+  function range(vals, log, pad) {
+    var a = Infinity, b = -Infinity;
+    vals.forEach(function (v) { if (isFinite(v) && (!log || v > 0)) { if (v < a) a = v; if (v > b) b = v; } });
+    if (!isFinite(a)) { a = log ? 1 : 0; b = log ? 10 : 1; }
+    if (b === a) { if (log) { a /= 2; b *= 2; } else { a -= 0.5; b += 0.5; } }
+    if (!log && pad) { var d = (b - a) * pad; b += d; if (a !== 0) a -= d; }
+    return [a, b];
+  }
+  function axes(spec, F, th, X, Y, xr, yr) {
+    var s = '', i;
+    var xt = spec.xticks || (spec.xlog ? logTicks(xr[0], xr[1]) : niceTicks(xr[0], xr[1], Math.max(3, Math.round((F.x1 - F.x0) / 90))));
+    var yt = spec.yticks || (spec.ylog ? logTicks(yr[0], yr[1]) : niceTicks(yr[0], yr[1], Math.max(3, Math.round((F.y1 - F.y0) / 55))));
+    s += '<g class="grid" stroke="' + th.grid + '" stroke-width="1">';
+    for (i = 0; i < xt.length; i++) { var px = X(xt[i]); if (px >= F.x0 - 0.5 && px <= F.x1 + 0.5) s += '<line x1="' + px.toFixed(1) + '" y1="' + F.y0 + '" x2="' + px.toFixed(1) + '" y2="' + F.y1 + '"/>'; }
+    for (i = 0; i < yt.length; i++) { var py = Y(yt[i]); if (py >= F.y0 - 0.5 && py <= F.y1 + 0.5) s += '<line x1="' + F.x0 + '" y1="' + py.toFixed(1) + '" x2="' + F.x1 + '" y2="' + py.toFixed(1) + '"/>'; }
+    s += '</g><g font-size="11" fill="' + th.muted + '">';
+    for (i = 0; i < xt.length; i++) { px = X(xt[i]); if (px >= F.x0 - 0.5 && px <= F.x1 + 0.5) s += '<text x="' + px.toFixed(1) + '" y="' + (F.y1 + 15) + '" text-anchor="middle">' + esc(spec.xfmt ? spec.xfmt(xt[i]) : fmt(xt[i])) + '</text>'; }
+    for (i = 0; i < yt.length; i++) { py = Y(yt[i]); if (py >= F.y0 - 0.5 && py <= F.y1 + 0.5) s += '<text x="' + (F.x0 - 7) + '" y="' + (py + 4).toFixed(1) + '" text-anchor="end">' + esc(spec.yfmt ? spec.yfmt(yt[i]) : fmt(yt[i])) + '</text>'; }
+    s += '</g>';
+    s += '<rect x="' + F.x0 + '" y="' + F.y0 + '" width="' + (F.x1 - F.x0) + '" height="' + (F.y1 - F.y0) + '" fill="none" stroke="' + th.axis + '"/>';
+    if (spec.xlabel) s += '<text x="' + ((F.x0 + F.x1) / 2) + '" y="' + (F.y1 + 33) + '" font-size="12" fill="' + th.ink + '" text-anchor="middle">' + esc(spec.xlabel) + '</text>';
+    if (spec.ylabel) s += '<text transform="translate(' + 15 + ',' + ((F.y0 + F.y1) / 2) + ') rotate(-90)" font-size="12" fill="' + th.ink + '" text-anchor="middle">' + esc(spec.ylabel) + '</text>';
+    return s;
+  }
+  function header(spec, F, th) {
+    var s = '';
+    if (spec.title) s += titleText(spec.title, F.x0, F.W - F.x0 - 120, th);
+    s += tagBadge(F.W - 10, 8, spec.tag || 'CALCULATED', th, true);
+    if (spec.note) {
+      var lines = wrap(spec.note, Math.floor((F.W - 30) / 6.2)).slice(0, 2);
+      lines.forEach(function (l, i) { s += '<text x="' + F.x0 + '" y="' + (F.y1 + 52 + i * 13) + '" font-size="10.5" fill="' + th.muted + '">' + esc(l) + '</text>'; });
+    }
+    return s;
+  }
+  function legend(spec, F, th, items) {
+    if (spec.legend === 'none' || !items.length) return '';
+    var s = '';
+    function swatch(x, y, it) {
+      if (it.type === 'points') return '<rect x="' + (x + 6) + '" y="' + (y - 4) + '" width="8" height="8" fill="' + it.color + '"/>';
+      if (it.type === 'area') return '<rect x="' + x + '" y="' + (y - 5) + '" width="20" height="10" fill="' + it.color + '" opacity="0.8"/>';
+      return '<line x1="' + x + '" y1="' + y + '" x2="' + (x + 20) + '" y2="' + y + '" stroke="' + it.color + '" stroke-width="2.4"' + (it.dash ? ' stroke-dasharray="' + it.dash + '"' : '') + '/>';
+    }
+    if (spec.legend === 'right') {
+      var lx = F.x1 + 14, ly = F.y0 + 6;
+      items.forEach(function (it, i) {
+        var y = ly + i * 18;
+        s += swatch(lx, y, it) + '<text x="' + (lx + 26) + '" y="' + (y + 4) + '" font-size="11" fill="' + th.ink + '">' + esc(it.name) + '</text>';
+      });
+      return s;
+    }
+    var bx = F.x0, by = F.y0 - F.legendRows * 17 - 12, bw = F.x1 - F.x0, bh = F.legendRows * 17 + 6;
+    s += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh + '" rx="5" fill="' + th.panel + '" stroke="' + th.grid + '"/>';
+    F.legendItems.forEach(function (li) {
+      var it = items.filter(function (q) { return q.name === li.name; })[0] || {};
+      var x = bx + 8 + li.x, y = by + 12 + li.row * 17;
+      s += swatch(x, y, it) + '<text x="' + (x + 25) + '" y="' + (y + 4) + '" font-size="11" fill="' + th.ink + '">' + esc(li.name) + '</text>';
+    });
+    return s;
+  }
+  function refLines(spec, F, th, X, Y) {
+    var s = '';
+    (spec.hlines || []).forEach(function (h) {
+      var y = Y(h.y); if (!(y >= F.y0 - 1 && y <= F.y1 + 1)) return;
+      var c = h.color || th.muted;
+      s += '<line x1="' + F.x0 + '" y1="' + y.toFixed(1) + '" x2="' + F.x1 + '" y2="' + y.toFixed(1) + '" stroke="' + c + '" stroke-width="1.2" stroke-dasharray="' + (h.dash || '5 4') + '"/>';
+      if (h.label) s += '<text x="' + (F.x1 - 6) + '" y="' + (y - 5).toFixed(1) + '" font-size="10.5" fill="' + c + '" text-anchor="end"' + halo(th) + '>' + esc(h.label) + '</text>';
+    });
+    var vl = (spec.vlines || []).slice().sort(function (a, b) { return a.x - b.x; }), lastY = {}, k = 0;
+    vl.forEach(function (v) {
+      var x = X(v.x); if (!(x >= F.x0 - 1 && x <= F.x1 + 1)) return;
+      var c = v.color || th.muted;
+      s += '<line x1="' + x.toFixed(1) + '" y1="' + F.y0 + '" x2="' + x.toFixed(1) + '" y2="' + F.y1 + '" stroke="' + c + '" stroke-width="1.2" stroke-dasharray="' + (v.dash || '4 3') + '"/>';
+      if (v.label) {
+        var flip = x > F.x0 + (F.x1 - F.x0) * 0.72;
+        var ly = F.y1 - 8 - (k % 3) * 14; k++;
+        s += '<text x="' + (x + (flip ? -5 : 5)).toFixed(1) + '" y="' + ly + '" font-size="10.5" fill="' + c + '" text-anchor="' + (flip ? 'end' : 'start') + '"' + halo(th) + '>' + esc(v.label) + '</text>';
+      }
+    });
+    return s;
+  }
+  function pathOf(xs, ys, X, Y) {
+    var d = '', pen = false;
+    for (var i = 0; i < xs.length; i++) {
+      var v = ys[i], u = xs[i];
+      if (v === null || v === undefined || !isFinite(v) || !isFinite(u)) { pen = false; continue; }
+      d += (pen ? 'L' : 'M') + X(u).toFixed(1) + ' ' + Y(v).toFixed(1);
+      pen = true;
+    }
+    return d;
+  }
+  function plotData(F, xr, yr, spec, series) {
+    var o = { x0: F.x0, x1: F.x1, y0: F.y0, y1: F.y1, W: F.W, H: F.H, xmin: xr[0], xmax: xr[1], ymin: yr[0], ymax: yr[1],
+      xlog: !!spec.xlog, ylog: !!spec.ylog, xlabel: spec.xlabel || 'x', ylabel: spec.ylabel || 'y', xunit: spec.xunit || '', yunit: spec.yunit || '',
+      series: series.filter(function (s) { return s.name && !s.noHover; }).map(function (s) {
+        var d = decimate(s.x, s.y, 400);
+        return { name: s.name, color: s.color, x: d.x.map(function (v) { return +(+v).toPrecision(5); }), y: d.y.map(function (v) { return v === null || !isFinite(v) ? null : +(+v).toPrecision(5); }) };
+      }) };
+    return esc(JSON.stringify(o));
+  }
+
+  /* ---------- line plot ---------- */
+  function linePlot(spec) {
+    var th = theme(spec.theme), series = (spec.series || []).map(function (s, i) {
+      var c = s.color || th.series[i % th.series.length];
+      return { name: s.name, x: s.x || [], y: s.y || [], type: s.type || 'line', color: c, width: s.width || 2, dash: s.type === 'dash' ? (s.dash || '6 4') : s.dash,
+        opacity: s.opacity, noLegend: s.noLegend, noHover: s.noHover, marker: s.marker, base: s.base };
+    });
+    var F = frame(spec, th);
+    var allX = [], allY = [];
+    series.forEach(function (s) { allX = allX.concat(s.x); allY = allY.concat(s.y.filter(function (v) { return v !== null; })); });
+    (spec.hlines || []).forEach(function (h) { if (spec.hlinesInRange !== false) allY.push(h.y); });
+    var xr = range(allX, spec.xlog, 0), yr = range(allY, spec.ylog, 0.06);
+    if (spec.xmin !== undefined) xr[0] = spec.xmin; if (spec.xmax !== undefined) xr[1] = spec.xmax;
+    if (spec.ymin !== undefined) yr[0] = spec.ymin; if (spec.ymax !== undefined) yr[1] = spec.ymax;
+    if (!spec.ylog && spec.ymin === undefined && yr[0] > 0 && yr[0] < (yr[1] - yr[0]) * 0.4) yr[0] = 0;
+    var X = scaler(xr[0], xr[1], F.x0, F.x1, spec.xlog), Y = scaler(yr[0], yr[1], F.y1, F.y0, spec.ylog);
+    var cid = nextId('clip');
+    var s = svgOpen(F.W, F.H, th, 'class="riceplot" data-plot="' + plotData(F, xr, yr, spec, series) + '"');
+    s += '<defs><clipPath id="' + cid + '"><rect x="' + F.x0 + '" y="' + F.y0 + '" width="' + (F.x1 - F.x0) + '" height="' + (F.y1 - F.y0) + '"/></clipPath></defs>';
+    s += header(spec, F, th) + axes(spec, F, th, X, Y, xr, yr);
+    s += '<g clip-path="url(#' + cid + ')">';
+    series.forEach(function (sr) {
+      if (sr.type === 'area') {
+        var d = pathOf(sr.x, sr.y, X, Y);
+        if (d) {
+          var base = sr.base ? sr.base : null, back = '';
+          if (base) { for (var i = sr.x.length - 1; i >= 0; i--) back += 'L' + X(sr.x[i]).toFixed(1) + ' ' + Y(base[i]).toFixed(1); }
+          else back = 'L' + X(sr.x[sr.x.length - 1]).toFixed(1) + ' ' + Y(Math.max(yr[0], spec.ylog ? yr[0] : 0)).toFixed(1) + 'L' + X(sr.x[0]).toFixed(1) + ' ' + Y(Math.max(yr[0], spec.ylog ? yr[0] : 0)).toFixed(1);
+          s += '<path d="' + d + back + 'Z" fill="' + sr.color + '" opacity="' + (sr.opacity || 0.25) + '"/>';
+        }
+      } else if (sr.type === 'points') {
+        for (var j = 0; j < sr.x.length; j++) {
+          if (!isFinite(sr.y[j]) || sr.y[j] === null) continue;
+          var px = X(sr.x[j]), py = Y(sr.y[j]);
+          if (sr.marker === 'circle') s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="3.6" fill="' + th.bg + '" stroke="' + sr.color + '" stroke-width="1.6"/>';
+          else s += '<rect x="' + (px - 3.5).toFixed(1) + '" y="' + (py - 3.5).toFixed(1) + '" width="7" height="7" fill="' + sr.color + '" stroke="' + th.bg + '" stroke-width="0.8"/>';
+        }
+      } else {
+        s += '<path d="' + pathOf(sr.x, sr.y, X, Y) + '" fill="none" stroke="' + sr.color + '" stroke-width="' + sr.width + '"' + (sr.dash ? ' stroke-dasharray="' + sr.dash + '"' : '') +
+          (sr.opacity ? ' opacity="' + sr.opacity + '"' : '') + ' stroke-linejoin="round" stroke-linecap="round"/>';
+      }
+    });
+    s += '</g>' + refLines(spec, F, th, X, Y);
+    if (spec.cursorX !== undefined && spec.cursorX !== null) {
+      var cx = X(spec.cursorX);
+      if (cx >= F.x0 && cx <= F.x1) s += '<line class="cursor" x1="' + cx.toFixed(1) + '" y1="' + F.y0 + '" x2="' + cx.toFixed(1) + '" y2="' + F.y1 + '" stroke="' + th.ink + '" stroke-width="1" opacity="0.55"/>';
+    }
+    s += legend(spec, F, th, series.filter(function (q) { return q.name && !q.noLegend; }));
+    return s + '</svg>';
+  }
+
+  /* ---------- stacked area with optional dashed overlay on the same scale ---------- */
+  function stackedArea(spec) {
+    var th = theme(spec.theme), x = spec.x, layers = spec.layers.map(function (l, i) { return { name: l.name, y: l.y, color: l.color || th.series[i % th.series.length], type: 'area' }; });
+    var F = frame(spec, th), cum = x.map(function () { return 0; }), tops = [];
+    layers.forEach(function (l) { var b = cum.slice(); cum = cum.map(function (c, i) { return c + Math.max(0, l.y[i] || 0); }); tops.push({ base: b, top: cum.slice() }); });
+    var ys = cum.slice(); if (spec.overlay) ys = ys.concat(spec.overlay.y);
+    var xr = range(x, false, 0), yr = [0, range(ys, false, 0.06)[1]];
+    if (spec.ymax !== undefined) yr[1] = spec.ymax;
+    var X = scaler(xr[0], xr[1], F.x0, F.x1), Y = scaler(yr[0], yr[1], F.y1, F.y0);
+    var hov = layers.map(function (l, i) { return { name: l.name, color: l.color, x: x, y: tops[i].top }; });
+    if (spec.overlay) hov.push({ name: spec.overlay.name, color: spec.overlay.color || th.ink, x: x, y: spec.overlay.y });
+    var s = svgOpen(F.W, F.H, th, 'class="riceplot" data-plot="' + plotData(F, xr, yr, spec, hov) + '"');
+    s += header(spec, F, th) + axes(spec, F, th, X, Y, xr, yr);
+    layers.forEach(function (l, i) {
+      var d = '', j;
+      for (j = 0; j < x.length; j++) d += (j ? 'L' : 'M') + X(x[j]).toFixed(1) + ' ' + Y(tops[i].top[j]).toFixed(1);
+      for (j = x.length - 1; j >= 0; j--) d += 'L' + X(x[j]).toFixed(1) + ' ' + Y(tops[i].base[j]).toFixed(1);
+      s += '<path d="' + d + 'Z" fill="' + l.color + '" opacity="0.82"/>';
+    });
+    var items = layers.map(function (l) { return { name: l.name, color: l.color, type: 'area' }; });
+    if (spec.overlay) {
+      var oc = spec.overlay.color || th.ink;
+      s += '<path d="' + pathOf(x, spec.overlay.y, X, Y) + '" fill="none" stroke="' + oc + '" stroke-width="2" stroke-dasharray="6 4"/>';
+      items.push({ name: spec.overlay.name, color: oc, dash: '6 4' });
+    }
+    s += refLines(spec, F, th, X, Y);
+    if (spec.cursorX !== undefined && spec.cursorX !== null) { var cx = X(spec.cursorX); if (cx >= F.x0 && cx <= F.x1) s += '<line class="cursor" x1="' + cx.toFixed(1) + '" y1="' + F.y0 + '" x2="' + cx.toFixed(1) + '" y2="' + F.y1 + '" stroke="' + th.ink + '" opacity="0.55"/>'; }
+    s += legend(spec, F, th, items);
+    return s + '</svg>';
+  }
+
+  /* ---------- horizontal bar chart, log x ---------- */
+  function barChart(spec) {
+    var th = theme(spec.theme), items = spec.items, W = spec.width || 640;
+    var rowH = spec.rowH || 30, labW = spec.labelWidth || Math.min(260, Math.max.apply(null, items.map(function (it) { return textW(it.label, 11.5); })) + 16);
+    var mt = (spec.title ? 42 : 26) + (spec.legendItems ? 26 : 0), mb = spec.note ? 78 : 46;
+    var H = spec.height || (mt + mb + items.length * rowH + 6);
+    var F = { W: W, H: H, x0: labW + 10, x1: W - 22, y0: mt, y1: H - mb };
+    var xr = [spec.xmin, spec.xmax];
+    var X = scaler(xr[0], xr[1], F.x0, F.x1, spec.xlog !== false);
+    var s = svgOpen(W, H, th, 'class="riceplot barchart"');
+    if (spec.title) s += titleText(spec.title, 12, W - 140, th);
+    s += tagBadge(W - 10, 8, spec.tag || 'CALCULATED', th, true);
+    var ticks = spec.ticks || logTicks(xr[0], xr[1]);
+    s += '<g stroke="' + th.grid + '">';
+    ticks.forEach(function (t) { var x = X(t); s += '<line x1="' + x.toFixed(1) + '" y1="' + F.y0 + '" x2="' + x.toFixed(1) + '" y2="' + F.y1 + '"/>'; });
+    s += '</g><g font-size="11" fill="' + th.muted + '" text-anchor="middle">';
+    ticks.forEach(function (t) { s += '<text x="' + X(t).toFixed(1) + '" y="' + (F.y1 + 15) + '">' + esc(spec.tickFmt ? spec.tickFmt(t) : fmt(t)) + '</text>'; });
+    s += '</g>';
+    if (spec.xlabel) s += '<text x="' + ((F.x0 + F.x1) / 2) + '" y="' + (F.y1 + 33) + '" font-size="12" fill="' + th.ink + '" text-anchor="middle">' + esc(spec.xlabel) + '</text>';
+    items.forEach(function (it, i) {
+      var y = F.y0 + i * rowH + 4, bh = rowH - 10, c = it.color || th.series[0];
+      s += '<text x="' + (F.x0 - 8) + '" y="' + (y + bh / 2 + 4) + '" font-size="11.5" fill="' + th.ink + '" text-anchor="end">' + esc(it.label) + '</text>';
+      if (it.value !== null && isFinite(it.value)) {
+        var xe = Math.min(F.x1, X(Math.max(it.value, xr[0])));
+        s += '<rect class="bar" x="' + F.x0 + '" y="' + y + '" width="' + Math.max(0, xe - F.x0).toFixed(1) + '" height="' + bh + '" rx="3" fill="' + c + '" opacity="' + (it.opacity || 0.85) + '"/>';
+        s += '<text x="' + (xe + 5).toFixed(1) + '" y="' + (y + bh / 2 + 4) + '" font-size="11" font-weight="600" fill="' + th.ink + '"' + halo(th) + '>' + esc(it.valueLabel || fmt(it.value)) + '</text>';
+      }
+      (it.markers || []).forEach(function (m) {
+        if (!isFinite(m.v)) return;
+        var mx = X(m.v), my = y + bh / 2, mc = m.color || th.ink;
+        if (m.shape === 'diamond') s += '<path d="M' + mx.toFixed(1) + ' ' + (my - 6) + 'l6 6l-6 6l-6 -6Z" fill="' + mc + '" stroke="' + th.bg + '" stroke-width="1"/>';
+        else s += '<line x1="' + mx.toFixed(1) + '" y1="' + (y - 2) + '" x2="' + mx.toFixed(1) + '" y2="' + (y + bh + 2) + '" stroke="' + mc + '" stroke-width="2.4"/>';
+      });
+    });
+    s += '<line x1="' + F.x0 + '" y1="' + F.y0 + '" x2="' + F.x0 + '" y2="' + F.y1 + '" stroke="' + th.axis + '"/>';
+    if (spec.legendItems) {
+      var lx = 12, ly = mt - 14;
+      spec.legendItems.forEach(function (li) {
+        var c = li.color || th.ink;
+        if (li.shape === 'diamond') s += '<path d="M' + (lx + 6) + ' ' + (ly - 6) + 'l6 6l-6 6l-6 -6Z" fill="' + c + '"/>';
+        else if (li.shape === 'tick') s += '<line x1="' + (lx + 6) + '" y1="' + (ly - 7) + '" x2="' + (lx + 6) + '" y2="' + (ly + 7) + '" stroke="' + c + '" stroke-width="2.4"/>';
+        else s += '<rect x="' + lx + '" y="' + (ly - 5) + '" width="14" height="10" rx="2" fill="' + c + '"/>';
+        s += '<text x="' + (lx + 18) + '" y="' + (ly + 4) + '" font-size="11" fill="' + th.ink + '">' + esc(li.name) + '</text>';
+        lx += textW(li.name, 11) + 34;
+      });
+    }
+    if (spec.note) wrap(spec.note, Math.floor((W - 24) / 6.2)).slice(0, 2).forEach(function (l, i) { s += '<text x="12" y="' + (F.y1 + 52 + i * 13) + '" font-size="10.5" fill="' + th.muted + '">' + esc(l) + '</text>'; });
+    return s + '</svg>';
+  }
+
+  /* ---------- colour bar fragment ---------- */
+  function colorbar(o) {
+    var th = theme(o.theme), id = nextId('cb'), stops = o.stops || HEAT, vert = !!o.vertical;
+    var s = '<defs><linearGradient id="' + id + '" x1="0" y1="' + (vert ? 1 : 0) + '" x2="' + (vert ? 0 : 1) + '" y2="0">';
+    stops.forEach(function (c, i) { s += '<stop offset="' + (i / (stops.length - 1)) + '" stop-color="' + c + '"/>'; });
+    s += '</linearGradient></defs><rect x="' + o.x + '" y="' + o.y + '" width="' + o.w + '" height="' + o.h + '" rx="3" fill="url(#' + id + ')" stroke="' + th.axis + '" stroke-width="0.8"/>';
+    var ticks = o.ticks || [o.min, o.max];
+    ticks.forEach(function (t) {
+      var f = (t - o.min) / (o.max - o.min);
+      if (vert) {
+        var y = o.y + o.h * (1 - f);
+        s += '<line x1="' + (o.x + o.w) + '" y1="' + y + '" x2="' + (o.x + o.w + 4) + '" y2="' + y + '" stroke="' + th.muted + '"/><text x="' + (o.x + o.w + 7) + '" y="' + (y + 4) + '" font-size="10.5" fill="' + th.muted + '">' + esc(o.fmt ? o.fmt(t) : fmt(t)) + '</text>';
+      } else {
+        var x = o.x + o.w * f;
+        s += '<line x1="' + x + '" y1="' + (o.y + o.h) + '" x2="' + x + '" y2="' + (o.y + o.h + 4) + '" stroke="' + th.muted + '"/><text x="' + x + '" y="' + (o.y + o.h + 15) + '" font-size="10.5" fill="' + th.muted + '" text-anchor="middle">' + esc(o.fmt ? o.fmt(t) : fmt(t)) + '</text>';
+      }
+    });
+    if (o.label) s += vert ? '<text x="' + (o.x + o.w / 2) + '" y="' + (o.y - 7) + '" font-size="10.5" fill="' + th.ink + '" text-anchor="middle">' + esc(o.label) + '</text>'
+      : '<text x="' + o.x + '" y="' + (o.y - 6) + '" font-size="10.5" fill="' + th.ink + '">' + esc(o.label) + '</text>';
+    return s;
+  }
+
+  /* ---------- Sankey-style flow fragment: one inflow splitting into outflows ---------- */
+  function flowDiagram(o) {
+    var th = theme(o.theme), total = 0, s = '';
+    o.outs.forEach(function (q) { total += Math.max(0, q.value); });
+    var inW = Math.max(total, 1e-12), maxBand = o.h * 0.62, xL = o.x, xR = o.x + o.w * 0.58;
+    var yIn = o.y + (o.h - maxBand) / 2;
+    s += '<rect x="' + xL + '" y="' + yIn + '" width="10" height="' + maxBand + '" rx="2" fill="' + (o.inColor || th.series[0]) + '"/>';
+    if (o.inLabel) {
+      s += '<text x="' + xL + '" y="' + (yIn - 6) + '" font-size="11" font-weight="600" fill="' + th.ink + '">' + esc(o.inLabel) + '</text>';
+    }
+    var yo = yIn, gap = 8, totalOutH = maxBand + gap * (o.outs.length - 1), yOutStart = o.y + (o.h - totalOutH) / 2, yR = yOutStart;
+    var labels = [];
+    o.outs.forEach(function (q) {
+      var bh = Math.max(0, q.value) / inW * maxBand, c = q.color || th.series[1];
+      if (bh > 0.2) {
+        var y0 = yo, y1 = yo + bh, r0 = yR, r1 = yR + bh, xm = (xL + 10 + xR) / 2;
+        s += '<path d="M' + (xL + 10) + ' ' + y0.toFixed(1) + 'C' + xm + ' ' + y0.toFixed(1) + ' ' + xm + ' ' + r0.toFixed(1) + ' ' + xR + ' ' + r0.toFixed(1) +
+          'L' + xR + ' ' + r1.toFixed(1) + 'C' + xm + ' ' + r1.toFixed(1) + ' ' + xm + ' ' + y1.toFixed(1) + ' ' + (xL + 10) + ' ' + y1.toFixed(1) + 'Z" fill="' + c + '" opacity="0.55"/>';
+        s += '<rect x="' + xR + '" y="' + r0.toFixed(1) + '" width="6" height="' + bh.toFixed(1) + '" fill="' + c + '"/>';
+      }
+      labels.push({ y: yR + bh / 2, q: q, c: c });
+      yo += bh; yR += bh + gap;
+    });
+    for (var i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 14) labels[i].y = labels[i - 1].y + 14;
+    labels.forEach(function (l) {
+      s += '<text x="' + (xR + 11) + '" y="' + (l.y + 4).toFixed(1) + '" font-size="11" fill="' + th.ink + '"><tspan fill="' + l.c + '" font-weight="700">■ </tspan>' + esc(l.q.label) +
+        (l.q.valueLabel ? '<tspan fill="' + th.muted + '"> ' + esc(l.q.valueLabel) + '</tspan>' : '') + '</text>';
+    });
+    return s;
+  }
+
+  /* ---------- rice-grain drawing ---------- */
+  function ricePath(cx, cy, a, b, rot) {
+    var n = 72, pts = [], ex = 2 / 2.25, cr = Math.cos(rot || 0), sr = Math.sin(rot || 0);
+    for (var k = 0; k < n; k++) {
+      var th = 2 * Math.PI * k / n, c = Math.cos(th), s = Math.sin(th);
+      var x = a * (c < 0 ? -1 : 1) * Math.pow(Math.abs(c), ex), y = b * (s < 0 ? -1 : 1) * Math.pow(Math.abs(s), ex);
+      y *= 1 - 0.07 * (1 + x / a) / 2;                                            // tapered toward one end
+      var dth = th - 2.75, notch = 1 - 0.09 * Math.exp(-dth * dth / (2 * 0.09 * 0.09)); // embryo notch
+      x *= notch; y *= notch;
+      pts.push([cx + x * cr - y * sr, cy + x * sr + y * cr]);
+    }
+    return 'M' + pts.map(function (p) { return p[0].toFixed(2) + ' ' + p[1].toFixed(2); }).join('L') + 'Z';
+  }
+  function annulus(cx, cy, a1, b1, a0, b0, rot) { return ricePath(cx, cy, a1, b1, rot) + ricePath(cx, cy, a0, b0, rot); }
+
+  /* grain cross-section. o: {cx, cy, R0px (px for raw radius), profile {rc, rf, X, T, G, R}, R0 (m),
+     mode 'moisture'|'heat', Tmin, Tmax, split, chalk, front, rawOutline, gloss, aspect, theme} */
+  function grainSection(o) {
+    var th = theme(o.theme), pr = o.profile, N = pr.X.length, id = nextId('gs');
+    var scale = o.R0px / o.R0, Rpx = pr.R * scale, asp = o.aspect || 1.75, rot = o.rot || 0;
+    var groups = [], step = Math.max(1, Math.ceil(N / 40));
+    for (var i = 0; i < N; i += step) {
+      var j = Math.min(N, i + step), X = 0, T = 0, G = 0, w = 0;
+      for (var k = i; k < j; k++) { var ww = 1; X += pr.X[k] * ww; T += pr.T[k] * ww; G += pr.G[k] * ww; w += ww; }
+      groups.push({ rOut: pr.rf[j] * scale, X: X / w, T: T / w, G: G / w });
+    }
+    var Tmin = o.Tmin === undefined ? 20 : o.Tmin, Tmax = o.Tmax === undefined ? 100 : o.Tmax;
+    function rings(mode) {
+      var s = '';
+      for (var g = groups.length - 1; g >= 0; g--) {
+        var q = groups[g], c = mode === 'heat' ? heatColor(q.T, Tmin, Tmax) : moistureColor(q.X);
+        s += '<path d="' + ricePath(o.cx, o.cy, q.rOut * asp, q.rOut, rot) + '" fill="' + c + '"/>';
+      }
+      return s;
+    }
+    function chalk() {
+      var s = '';
+      for (var g = groups.length - 1; g >= 0; g--) {
+        var q = groups[g], op = 0.92 * (1 - q.G), rin = g > 0 ? groups[g - 1].rOut : 0;
+        if (op < 0.01) continue;
+        s += '<path d="' + (rin > 0 ? annulus(o.cx, o.cy, q.rOut * asp, q.rOut, rin * asp, rin, rot) : ricePath(o.cx, o.cy, q.rOut * asp, q.rOut, rot)) +
+          '" fill-rule="evenodd" fill="#ffffff" opacity="' + op.toFixed(3) + '"/>';
+      }
+      return s;
+    }
+    var s = '<g class="grain-section">';
+    s += '<defs><clipPath id="' + id + 'L"><rect x="' + (o.cx - 4 * Rpx * asp) + '" y="' + (o.cy - 4 * Rpx) + '" width="' + (4 * Rpx * asp) + '" height="' + (8 * Rpx) + '"/></clipPath>' +
+      '<clipPath id="' + id + 'R"><rect x="' + o.cx + '" y="' + (o.cy - 4 * Rpx) + '" width="' + (4 * Rpx * asp) + '" height="' + (8 * Rpx) + '"/></clipPath>' +
+      '<radialGradient id="' + id + 'H" cx="0.36" cy="0.3" r="0.75"><stop offset="0" stop-color="#ffffff" stop-opacity="' + (0.12 + 0.5 * (o.gloss || 0)).toFixed(3) + '"/>' +
+      '<stop offset="0.55" stop-color="#ffffff" stop-opacity="0.04"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient></defs>';
+    if (o.shadow !== false) s += '<path d="' + ricePath(o.cx + 4, o.cy + 7, Rpx * asp, Rpx, rot) + '" fill="#000" opacity="0.13" filter="' + (o.blurId ? 'url(#' + o.blurId + ')' : '') + '"/>';
+    if (o.split) {
+      s += '<g clip-path="url(#' + id + 'L)">' + rings('heat') + '</g><g clip-path="url(#' + id + 'R)">' + rings('moisture') + (o.chalk ? chalk() : '') + '</g>';
+      s += '<line x1="' + o.cx + '" y1="' + (o.cy - Rpx - 6) + '" x2="' + o.cx + '" y2="' + (o.cy + Rpx + 6) + '" stroke="' + th.ink + '" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.6"/>';
     } else {
-      let x = m.l + 8, y = m.t + 14;
-      const bg = []; let txt = '';
-      items.forEach(se => { const col = se.color || th.series[o.series.indexOf(se) % th.series.length]; const wTxt = 7 * se.name.length + 34; if (x + wTxt > m.l + pw - 4) { x = m.l + 8; y += 17; } txt += legendKey(x, y, col, se, th) + `<text x="${x + 26}" y="${y + 4}" font-size="11" fill="${th.ink}">${esc(se.name)}</text>`; x += wTxt; });
-      if (o.legendBox !== false && items.length) s += `<rect x="${m.l + 3}" y="${m.t + 3}" width="${Math.min(pw - 6, y === m.t + 14 ? x - m.l - 2 : pw - 6)}" height="${y - m.t + 9}" rx="4" fill="${th.bg}" opacity=".86"/>`;
-      s += txt;
+      s += rings(o.mode || 'moisture');
+      if (o.chalk) s += chalk();
     }
+    var hp = ricePath(o.cx, o.cy, Rpx * asp, Rpx, rot);
+    s += '<path d="' + hp + '" fill="url(#' + id + 'H)"/>';
+    // faint longitudinal grooves
+    s += '<path transform="rotate(' + (rot * 180 / Math.PI).toFixed(2) + ' ' + o.cx + ' ' + o.cy + ')" d="M' + (o.cx - Rpx * asp * 0.78).toFixed(1) + ' ' + (o.cy - Rpx * 0.34).toFixed(1) + 'Q' + o.cx + ' ' + (o.cy - Rpx * 0.5).toFixed(1) + ' ' + (o.cx + Rpx * asp * 0.8).toFixed(1) + ' ' + (o.cy - Rpx * 0.3).toFixed(1) +
+      'M' + (o.cx - Rpx * asp * 0.75).toFixed(1) + ' ' + (o.cy + Rpx * 0.36).toFixed(1) + 'Q' + o.cx + ' ' + (o.cy + Rpx * 0.52).toFixed(1) + ' ' + (o.cx + Rpx * asp * 0.78).toFixed(1) + ' ' + (o.cy + Rpx * 0.3).toFixed(1) +
+      '" fill="none" stroke="#7a6a50" stroke-width="0.9" opacity="0.22"/>';
+    if (o.front) {
+      var rf = 0, Gs = pr.G;
+      if (Gs[0] < 0.5 && Gs[N - 1] >= 0.5) {
+        for (var q = 1; q < N; q++) if (Gs[q] >= 0.5) { var f = (0.5 - Gs[q - 1]) / (Gs[q] - Gs[q - 1]); rf = pr.rc[q - 1] + f * (pr.rc[q] - pr.rc[q - 1]); break; }
+        var rfp = rf * scale;
+        s += '<path class="front" d="' + ricePath(o.cx, o.cy, rfp * asp, rfp, rot) + '" fill="none" stroke="#d2352b" stroke-width="1.8" stroke-dasharray="5 3"' +
+          (o.split ? ' clip-path="url(#' + id + 'R)"' : '') + '/>';
+      }
+    }
+    if (o.rawOutline && Math.abs(pr.R - o.R0) / o.R0 > 0.004) {
+      s += '<path d="' + ricePath(o.cx, o.cy, o.R0px * asp, o.R0px, rot) + '" fill="none" stroke="' + th.ink + '" stroke-width="1.1" stroke-dasharray="4 4" opacity="0.6"/>';
+    }
+    s += '<path d="' + hp + '" fill="none" stroke="' + (o.stroke || '#8a7656') + '" stroke-width="1.4" opacity="0.85"/>';
+    return s + '</g>';
   }
-  return s + '</svg>';
-}
-function legendWidth(series) { const L = Math.max(8, ...series.filter(se => se.name).map(se => se.name.length)); return Math.min(300, Math.max(120, Math.round(6.4 * L + 48))); }
-function legendKey(x, y, col, se, th) {
-  if (se.points && !se.line) return se.points === 'square' ? `<rect x="${x + 5}" y="${y - 4}" width="8" height="8" fill="${th.bg}" stroke="${col}" stroke-width="2"/>` : `<circle cx="${x + 9}" cy="${y}" r="3.8" fill="${se.hollow ? th.bg : col}" stroke="${col}" stroke-width="1.6"/>`;
-  return `<line x1="${x}" y1="${y}" x2="${x + 20}" y2="${y}" stroke="${col}" stroke-width="${se.width || 2}" ${se.dash ? `stroke-dasharray="${se.dash}"` : ''}/>`;
-}
-function logTicks(a, b) { const t = []; for (let e = Math.floor(Math.log10(a)); e <= Math.ceil(Math.log10(b)); e++) { const v = Math.pow(10, e); if (v >= a * 0.999 && v <= b * 1.001) t.push(v); } return t; }
 
-/* ---------- grain cross-section ----------
-   o: {cx, cy, a (px, semi-axis at current size), b, rings: [{f: outer radius fraction, color, chalk (0–1)}],
-       outline0: fraction of current radius for the original size (dashed), split: {left: rings, right: rings}, uid, theme, stroke} */
-/* Rice-grain outline: a flattened superellipse, slightly tapered towards one end, with a small
-   embryo notch at the blunt end. Display shape only (illustrative); size comes from the model. */
-function ricePath(cx, cy, a, b) {
-  const n = 72, e = 2 / 2.25, pts = [];
-  for (let k = 0; k < n; k++) {
-    const th = 2 * Math.PI * k / n, c = Math.cos(th), s = Math.sin(th);
-    let x = a * Math.sign(c) * Math.pow(Math.abs(c), e), y = b * Math.sign(s) * Math.pow(Math.abs(s), e) * (1 - 0.07 * c);
-    const d = th - 2.75, notch = 1 - 0.06 * Math.exp(-(d * d) / 0.02);              // small embryo notch, lower blunt end
-    pts.push([cx + x * notch, cy + y * notch]);
-  }
-  return 'M' + pts.map(p => n2(p[0]) + ',' + n2(p[1])).join('L') + 'Z';
-}
-function annulus(cx, cy, a, b, f0, f1) {
-  return ricePath(cx, cy, a * f1, b * f1) + (f0 > 1e-6 ? ricePath(cx, cy, a * f0, b * f0) : '');
-}
-function ringsSVG(cx, cy, a, b, rings, extra) {
-  let s = '', f0 = 0;
-  for (const r of rings) { s += `<path d="${annulus(cx, cy, a, b, f0, r.f)}" fill="${r.color}" stroke="${r.color}" stroke-width=".6" fill-rule="evenodd" ${extra || ''}/>`; f0 = r.f; }
-  return s;
-}
-function chalkSVG(cx, cy, a, b, rings) {
-  let s = '', f0 = 0;
-  for (const r of rings) { if (r.chalk > 0.01) s += `<path d="${annulus(cx, cy, a, b, f0, r.f)}" fill="#fbfaf6" fill-rule="evenodd" opacity="${n2(0.92 * r.chalk)}"/>`; f0 = r.f; }
-  return s;
-}
-function grainSection(o) {
-  const th = THEMES[o.theme || 'light'], uid = o.uid || 'g';
-  let s = '';
-  if (o.split) {
-    s += `<defs><clipPath id="L-${uid}"><rect x="${o.cx - o.a - 4}" y="${o.cy - o.b - 4}" width="${o.a + 4}" height="${2 * o.b + 8}"/></clipPath><clipPath id="R-${uid}"><rect x="${o.cx}" y="${o.cy - o.b - 4}" width="${o.a + 4}" height="${2 * o.b + 8}"/></clipPath></defs>`;
-    s += `<g clip-path="url(#L-${uid})">${ringsSVG(o.cx, o.cy, o.a, o.b, o.split.left)}</g><g clip-path="url(#R-${uid})">${ringsSVG(o.cx, o.cy, o.a, o.b, o.split.right)}</g>`;
-    s += `<line x1="${o.cx}" y1="${o.cy - o.b - 6}" x2="${o.cx}" y2="${o.cy + o.b + 6}" stroke="${th.ink}" stroke-width="1.5" stroke-dasharray="3 3"/>`;
-  } else {
-    s += ringsSVG(o.cx, o.cy, o.a, o.b, o.rings);
-    if (o.chalk) s += chalkSVG(o.cx, o.cy, o.a, o.b, o.rings);
-  }
-  // surface realism (illustrative): specular highlight that grows glossier as the grain cooks, edge shading, shallow grooves
-  const gloss = o.gloss != null ? Math.min(1, Math.max(0, o.gloss)) : 0.35, outer = ricePath(o.cx, o.cy, o.a, o.b);
-  s += `<defs><radialGradient id="hl-${uid}" cx=".33" cy=".27" r=".8"><stop offset="0" stop-color="#ffffff" stop-opacity="${n2(0.12 + 0.5 * gloss)}"/><stop offset=".38" stop-color="#ffffff" stop-opacity="${n2(0.04 + 0.12 * gloss)}"/><stop offset=".72" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity=".22"/></radialGradient></defs>`;
-  s += `<path d="${outer}" fill="url(#hl-${uid})"/>`;
-  const gr = (k) => `M${n2(o.cx - 0.82 * o.a)},${n2(o.cy + k * o.b)}Q${n2(o.cx)},${n2(o.cy + (k - 0.12 * Math.sign(k)) * o.b * 1.05)} ${n2(o.cx + 0.8 * o.a)},${n2(o.cy + k * 0.85 * o.b)}`;
-  s += `<path d="${gr(-0.42)}" fill="none" stroke="#ffffff" stroke-opacity="${n2(0.18 + 0.2 * gloss)}" stroke-width="1.4"/><path d="${gr(0.4)}" fill="none" stroke="#000000" stroke-opacity=".08" stroke-width="1.4"/>`;
-  if (o.front != null && o.front > 0.01) s += `<path d="${annulus(o.cx, o.cy, o.a, o.b, 0, o.front)}" fill="none" stroke="${o.frontColor || '#c2412d'}" stroke-width="1.6" stroke-dasharray="4 3"/>`;
-  s += `<path d="${outer}" fill="none" stroke="${o.stroke || th.ink}" stroke-width="1.5" stroke-linejoin="round"/>`;
-  if (o.outline0 && Math.abs(o.outline0 - 1) > 0.01) s += `<path d="${annulus(o.cx, o.cy, o.a, o.b, 0, o.outline0)}" fill="none" stroke="${th.muted}" stroke-width="1.2" stroke-dasharray="5 4"/>`;
-  return s;
-}
-/* Turn a radial profile into display rings (coarsened to at most nMax rings). */
-function profileRings(prof, valueToColor, chalkOf, nMax) {
-  const N = prof.r.length, step = Math.max(1, Math.ceil(N / (nMax || 40))), R = prof.R, rings = [];
-  for (let i = 0; i < N; i += step) {
-    const j = Math.min(N - 1, i + step - 1), mid = Math.floor((i + j) / 2);
-    rings.push({ f: prof.rf[j + 1] / R, color: valueToColor(prof, mid), chalk: chalkOf ? chalkOf(prof, mid) : 0 });
-  }
-  return rings;
-}
-
-/* ---------- colour bar ---------- */
-function colorbar(o) {
-  const th = THEMES[o.theme || 'light'], x = o.x, y = o.y, w = o.w || 160, h = o.h || 10, uid = o.uid || 'cb';
-  const stops = o.stops || CMAPS[o.cmap];
-  let s = `<defs><linearGradient id="lg-${uid}" x1="0" x2="1" y1="0" y2="0">${stops.map((c, i) => `<stop offset="${(100 * i / (stops.length - 1)).toFixed(1)}%" stop-color="${c}"/>`).join('')}</linearGradient></defs>`;
-  s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="url(#lg-${uid})" stroke="${th.axis}" stroke-width=".6"/>`;
-  s += `<text x="${x}" y="${y + h + 13}" font-size="10.5" fill="${th.muted}">${esc(o.minLabel)}</text><text x="${x + w}" y="${y + h + 13}" font-size="10.5" text-anchor="end" fill="${th.muted}">${esc(o.maxLabel)}</text>`;
-  if (o.label) s += `<text x="${x}" y="${y - 5}" font-size="11" fill="${th.ink}">${esc(o.label)}</text>`;
-  return s;
-}
-
-/* ---------- horizontal bars with markers (log x allowed) ---------- */
-function barChart(o) {
-  const th = THEMES[o.theme || 'light'], W = o.w || 720, rowH = o.rowH || 30, m = { l: o.labelW || 270, r: 24, t: o.title ? 40 : 18, b: 58 };
-  const H = m.t + m.b + rowH * o.rows.length, pw = W - m.l - m.r;
-  const lx = v => Math.log10(v), xMin = o.xMin, xMax = o.xMax;
-  const sx = o.xLog ? v => m.l + pw * (lx(v) - lx(xMin)) / (lx(xMax) - lx(xMin)) : v => m.l + pw * (v - xMin) / (xMax - xMin);
-  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${FONT}" role="img" aria-label="${esc(o.title || 'bar chart')}"><rect width="${W}" height="${H}" fill="${th.bg}"/>`;
-  if (o.title) s += `<text x="16" y="22" font-size="14" font-weight="600" fill="${th.ink}">${esc(o.title)}</text>`;
-  const ticks = o.ticks || (o.xLog ? logTicks(xMin, xMax) : niceTicks(xMin, xMax, 6));
-  for (const v of ticks) { const X = n2(sx(v)); s += `<line x1="${X}" y1="${m.t}" x2="${X}" y2="${m.t + rowH * o.rows.length}" stroke="${th.grid}"/><text x="${X}" y="${m.t + rowH * o.rows.length + 15}" font-size="11" text-anchor="middle" fill="${th.muted}">${esc(o.tickFmt ? o.tickFmt(v) : fmtTick(v))}</text>`; }
-  if (o.xLabel) s += `<text x="${m.l + pw / 2}" y="${m.t + rowH * o.rows.length + 34}" font-size="12" text-anchor="middle" fill="${th.ink}">${esc(o.xLabel)}</text>`;
-  o.rows.forEach((r, i) => {
-    const y = m.t + i * rowH, x0 = sx(xMin);
-    s += `<text x="${m.l - 10}" y="${y + rowH / 2 + 4}" font-size="11.5" text-anchor="end" fill="${th.ink}">${esc(r.label)}</text>`;
-    if (r.value != null && isFinite(r.value)) { const X = sx(Math.max(r.value, xMin)); s += `<rect x="${x0}" y="${y + 6}" width="${n2(Math.max(1, X - x0))}" height="${rowH - 12}" rx="3" fill="${r.color || th.series[0]}" opacity=".9"/><text x="${n2(X + 5)}" y="${y + rowH / 2 + 4}" font-size="11" fill="${th.ink}">${esc(r.valueLabel || '')}</text>`; }
-    for (const mk of r.markers || []) { if (mk.x == null || !isFinite(mk.x)) continue; const X = n2(sx(mk.x)); s += mk.shape === 'diamond' ? `<path d="M${X},${y + 5}l6,${rowH / 2 - 5}l-6,${rowH / 2 - 5}l-6,${-(rowH / 2 - 5)}Z" fill="${mk.color}" stroke="${th.bg}" stroke-width="1"/>` : `<rect x="${X - 2}" y="${y + 3}" width="4" height="${rowH - 6}" fill="${mk.color}"/>`; }
-  });
-  if (o.legend) { let x = 16; const y = H - 12; for (const L of o.legend) { s += (L.shape === 'diamond' ? `<path d="M${x + 6},${y - 9}l6,6l-6,6l-6,-6Z" fill="${L.color}"/>` : L.shape === 'tick' ? `<rect x="${x + 4}" y="${y - 10}" width="4" height="14" fill="${L.color}"/>` : `<rect x="${x}" y="${y - 8}" width="14" height="10" rx="2" fill="${L.color}"/>`) + `<text x="${x + 20}" y="${y}" font-size="11" fill="${th.ink}">${esc(L.label)}</text>`; x += 26 + 6.3 * L.label.length; } }
-  return s + '</svg>';
-}
-
-/* ---------- stacked areas ---------- */
-function stackedArea(o) {
-  const series = o.series, n = o.x.length, cum = series.map(() => new Array(n).fill(0)), th = THEMES[o.theme || 'light'];
-  for (let i = 0; i < n; i++) { let acc = 0; series.forEach((se, k) => { acc += Math.max(0, se.y[i] || 0); cum[k][i] = acc; }); }
-  const top = Math.max(...cum[cum.length - 1], ...(o.overlay ? o.overlay.y.filter(isFinite) : [0]));
-  const yMax = o.yMax != null ? o.yMax : top * 1.05;
-  const lines = series.map((se, k) => ({ name: se.name, x: o.x, y: cum[k], color: se.color, width: 1.2 }))
-    .concat(o.overlay ? [{ name: o.overlay.name, x: o.x, y: o.overlay.y, color: th.ink, dash: '4 3', width: 1.7 }] : []);
-  const base = { ...o, yMin: 0, yMax, yPad: false, series: lines };
-  let svg = linePlot(base);
-  // filled bands, drawn with the same scales, inserted just after the clip group opens
-  const W = o.w || 640, H = o.h || 300, legendRight = o.legend === 'right';
-  const m = { l: 62, r: legendRight ? legendWidth(lines) : 20, t: o.title ? 34 : 16, b: o.note ? 58 : 46 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const xMin = o.xMin != null ? o.xMin : Math.min(...o.x), xMax = o.xMax != null ? o.xMax : Math.max(...o.x);
-  const sx = v => m.l + pw * (v - xMin) / (xMax - xMin), sy = v => m.t + ph * (1 - v / yMax);
-  let bands = '';
-  series.forEach((se, k) => {
-    const top = o.x.map((x, i) => `${n2(sx(x))},${n2(sy(cum[k][i]))}`), bot = o.x.map((x, i) => `${n2(sx(x))},${n2(sy(k ? cum[k - 1][i] : 0))}`).reverse();
-    bands += `<polygon points="${top.concat(bot).join(' ')}" fill="${se.color}" opacity="${se.opacity || 0.55}"/>`;
-  });
-  return svg.replace(/(<g clip-path="url\(#cp-[^"]*\)">)/, '$1' + bands);
-}
-
-/* ---------- simple flow (Sankey-style) diagram: one source split into sinks ---------- */
-function flowDiagram(o) {
-  const th = THEMES[o.theme || 'light'], W = o.w || 360, H = o.h || 200, x0 = o.x || 0, y0 = o.y || 0;
-  const tot = o.sinks.reduce((a, s) => a + Math.max(0, s.value), 0) || 1, gap = 6, usable = H - 30 - gap * (o.sinks.length - 1);
-  let s = '', yS = y0 + 20, yT = y0 + 20, lastLab = -1e9;
-  const srcH = usable;
-  s += `<rect x="${x0}" y="${y0 + 20}" width="12" height="${n2(srcH + gap * (o.sinks.length - 1))}" rx="3" fill="${o.sourceColor || th.series[0]}"/>`;
-  s += `<text x="${x0}" y="${y0 + 12}" font-size="11.5" font-weight="600" fill="${th.ink}">${esc(o.source)}</text>`;
-  const xr = x0 + W - 150;
-  o.sinks.forEach((k) => {
-    const hgt = Math.max(1.5, usable * Math.max(0, k.value) / tot);
-    s += `<path d="M${x0 + 12},${n2(yS)}C${n2((x0 + xr) / 2)},${n2(yS)} ${n2((x0 + xr) / 2)},${n2(yT)} ${xr},${n2(yT)}L${xr},${n2(yT + hgt)}C${n2((x0 + xr) / 2)},${n2(yT + hgt)} ${n2((x0 + xr) / 2)},${n2(yS + hgt)} ${x0 + 12},${n2(yS + hgt)}Z" fill="${k.color}" opacity=".55"/>`;
-    s += `<rect x="${xr}" y="${n2(yT)}" width="8" height="${n2(hgt)}" fill="${k.color}"/>`;
-    const ly = Math.max(yT + hgt / 2 + 4, lastLab + 14); lastLab = ly;
-    s += `<text x="${xr + 14}" y="${n2(ly)}" font-size="11" fill="${th.ink}">${esc(k.label)}</text>`;
-    yS += hgt; yT += hgt + gap;
-  });
-  return s;
-}
-
-/* ---------- wrap fragments as a standalone SVG ---------- */
-function wrap(inner, W, H, theme, title) {
-  const th = THEMES[theme || 'light'];
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${FONT}">` +
-    `<rect width="${W}" height="${H}" fill="${th.bg}"/>` + (title ? `<text x="16" y="22" font-size="14" font-weight="600" fill="${th.ink}">${esc(title)}</text>` : '') + inner + '</svg>';
-}
-
-const api = { THEMES, CMAPS, lerpColor, colorFor, moistColor, heatColor, niceTicks, fmtTick, linePlot, grainSection, ricePath, profileRings, colorbar, barChart, stackedArea, flowDiagram, wrap, esc };
-if (typeof module !== 'undefined' && module.exports) module.exports = api;
-root.RicePlots = api;
-})(typeof window !== 'undefined' ? window : globalThis);
+  var API = {
+    THEMES: THEMES, theme: theme, HEAT: HEAT, MOIST: MOIST, FONT: FONT, SERIF: SERIF, esc: esc, fmt: fmt,
+    lerpColor: lerpColor, rampColor: rampColor, seqColors: seqColors, heatColor: heatColor, moistureColor: moistureColor, wetBasis: wetBasis,
+    niceTicks: niceTicks, logTicks: logTicks, wrap: wrap, textW: textW, tagBadge: tagBadge, titleText: titleText,
+    linePlot: linePlot, stackedArea: stackedArea, barChart: barChart, colorbar: colorbar, flowDiagram: flowDiagram,
+    ricePath: ricePath, annulus: annulus, grainSection: grainSection, nextId: nextId
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = API;
+  root.RicePlots = API;
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

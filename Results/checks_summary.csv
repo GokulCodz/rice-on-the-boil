@@ -1,0 +1,34 @@
+id,group,name,status,value,target,detail
+A1,A,"Heat conduction, sphere with convective surface, Bi = 1 vs Carslaw–Jaeger series",PASS,0.0003933146138554444,max |Δθ| < 0.01,max |Δθ| = 0.000393
+A2,A,"Heat conduction, sphere with convective surface, Bi = 10 vs Carslaw–Jaeger series",PASS,0.0011499539024890648,max |Δθ| < 0.01,max |Δθ| = 0.00115
+A3,A,"Water uptake, sphere, constant D, fixed surface vs Crank series",PASS,0.0017484125658235594,max |ΔM/M∞| < 0.005,max |Δ| = 0.00175 (Fo 1e-3 … 0.6)
+A4,A,"Water uptake, cylinder, constant D, fixed surface vs Crank series",PASS,0.0012311311791294022,max |ΔM/M∞| < 0.005,max |Δ| = 0.00123 (Fo 1e-3 … 0.6)
+A5,A,"Water uptake, slab, constant D, fixed surface vs Crank series",PASS,0.0006566450211967431,max |ΔM/M∞| < 0.005,max |Δ| = 0.000657 (Fo 1e-3 … 0.6)
+A6,A,Early-time uptake vs √t law 6√(Fo/π) − 3Fo (sphere),PASS,0.008154500601841256,relative error < 0.02 for Fo 0.002–0.03,max rel = 0.00815
+A7,A,"Grid convergence order, N = 20 → 40 → 80 (sphere uptake profile at Fo = 0.05)",PASS,1.9369415309310662,observed order 1.5–2.5,"errors 0.00152, 0.000391, 0.000104 → order 1.94"
+B1,B,"Grain water balance: Σ m_s X − W0 − ∫ṁ dt (full model, 25 min)",PASS,2.0735348884357633e-14,< 1e-9 relative,max |residual| = 2.1e-14
+B2,B,Grain energy balance: E − E0 − ∫(conduction + water enthalpy) dt,PASS,1.0285309414709885e-13,< 1e-9 relative,max |residual| = 1.0e-13
+B3,B,Dry solid conserved exactly (shells follow the solid),PASS,0,< 1e-12 relative,Σm_s drift 0.0; from volumes 0.0
+B4,B,Volume additivity: geometric volume = Σ m_s (1/ρ_s + X/ρ_w),PASS,1.4500155277300917e-15,< 1e-12 relative,max |ΔV/V| = 1.5e-15
+B5,B,"Pot water balance (open pot boiling, 25 min): M + steam = M0",PASS,7.593925488436071e-14,< 1e-9 relative,max |residual| = 7.6e-14
+B6,B,Pot energy balance: ΔE + steam enthalpy + losses = ∫P dt,PASS,2.6490953233506944e-14,< 1e-9 relative,max |residual| = 2.6e-14
+B7,B,Pot + rice water balance: free water + grains + steam = const,PASS,1.4106771306643395e-12,< 1e-9 relative,max |residual| = 1.4e-12
+B8,B,Pot + rice energy balance (grains as a second control volume),PASS,8.391973539787051e-15,< 1e-9 relative,max |residual| = 8.4e-15
+C1,C,Bi → ∞ (h = 1e9) equals fixed-surface-temperature series,PASS,0.0013374620070404353,max |Δθ| < 0.01,max |Δθ| = 0.00134
+C2,C,Bi = 0.01 equals lumped model θ = exp(−3 Bi Fo),PASS,0.0009517995699661608,max |Δθ| < 0.005,max |Δθ| = 0.000952
+C3,C,"Boiling point, Sea level (0 m) = 100 ± 0.05 °C",PASS,99.99682982482221,100 ± 0.05 °C,Antoine 99.997 °C; Clausius–Clapeyron 100.00 °C; p = 101325 Pa
+C4,C,"Boiling point, 3000 m = 90 ± 0.5 °C",PASS,90.02950700400976,90 ± 0.5 °C,Antoine 90.030 °C; Clausius–Clapeyron 89.799 °C; p = 70108.5 Pa
+C5,C,"Boiling point, Pressure cooker (1 bar gauge, sea level) = 120.5 ± 1 °C",PASS,120.5359045360297,120.5 ± 1 °C,Antoine 120.54 °C; Clausius–Clapeyron 120.63 °C; p = 201325 Pa
+C6,C,Cooked grain at equilibrium with the bath stays at equilibrium,PASS,4.362732397567015e-12,"max |ΔX|, |ΔT| < 1e-9","max |ΔX| = 8.0e-15, max |ΔT| = 4.4e-12 K after 10 min"
+C7,C,D = 0 gives no water uptake,PASS,2.7755575615628914e-17,uptake = 0,"waterIn = 0.0 kg, ⟨X⟩ = 0.140000"
+D1,D,Constant-D centre time (X_c half-way) ∝ R²,PASS,2.0000001421417473,exponent 2.00 ± 0.03,"times 297.7, 629.2, 1191 s → exponent 2.000"
+D2,D,Full model: core-gelatinization time exponent vs R (information),INFO,1.7528454658393255,INFO (not exactly 2: kinetics and capacity add scales),"core times 5.21, 9.95, 17.6 min → exponent 1.75"
+D3,D,Lewis number Le = α/D_gel(100 °C) (information),INFO,355.3507124182103,INFO (science file ≈ 355),"α = 1.147e-7 m²/s, D = 3.228e-10 m²/s, Le = 355.4, √Le = 18.9"
+D4,D,"Péclet number of water-carried enthalpy, Pe = c_w j R / k",PASS,0.01768085315355402,max Pe < 0.1 (conduction dominates),max Pe (t ≥ 60 s) = 0.0177
+D5,D,Gelatinization enthalpy / energy absorbed by the grain,PASS,0.010908886092581073,< 0.05 (sink is small),ratio = 0.0109
+D6,D,Resolution: halving Δr and Δt changes the core time by < 2 %,PASS,0.0014661516622047586,< 0.02,"N 60: 9.955 min; N 120, Δt/2: 9.940 min; change 0.147 %"
+E1,E,D(45 °C) vs ≈ 8.8e-11 m²/s reported for white-rice soaking (25–65 °C),PASS,6.785492430399075e-11,within ×1.5,D(45 °C) = 6.79e-11 m²/s (ratio 0.771)
+E2,E,Mean moisture after 2 h soaking at 25 °C (raw starch holds ≈ 0.40),PASS,0.3540841360468095,0.30–0.42,⟨X⟩ = 0.354 (science file 0.354)
+E3,E,Core-gelatinization time of medium grain at 100 °C vs glass-plate tests,PASS,9.949797243815704,5–25 min (ISO 14864 glass-plate ≈ 15 min),core time 9.95 min
+E4,E,"Presoaking shortens the core time monotonically (0, 30, 120 min)",PASS,0.7567231041789956,strictly decreasing,9.95 > 9.19 > 7.53 min
+E5,E,Grain centre within 1 K of boiling water (heating is fast),PASS,8.52002474309452,< 60 s,t = 8.52 s (science file ≈ 8.6 s)

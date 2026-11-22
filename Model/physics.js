@@ -1,675 +1,817 @@
-/* =====================================================================
-   Rice on the Boil — physics engine (no DOM).
-   MS2280 Transport Phenomena in Materials Processing, Project 19.
-
-   SI units throughout unless a name says otherwise (TC = degrees C).
-   Moisture content X is on a DRY BASIS: kg water per kg dry solid.
-
-   Contents
-     1. Parameters with sources
-     2. Water / steam properties (Antoine, Watson, standard atmosphere)
-     3. Grain geometry (ellipsoid -> equivalent radius)
-     4. Grain model: radial finite volumes that follow the dry solid
-        - water: d(m_s X)/dt = sum of face flows, flux relative to solid
-          j = -rho_d D dX/dr  (derived from the slides' j = -rho D dw/dr)
-        - energy: conduction + enthalpy carried by water + gelatinization sink
-        - gelatinization: first-order, needs heat (T > T_onset) and water
-        - swelling: shell volume = m_s (1/rho_s + X/rho_w)  (volume additivity)
-     5. Pot model: lumped liquid water + vessel, boiling cap, evaporation,
-        optionally coupled to N identical grains
-     6. Analytical reference solutions used by the checks
-     7. Small utilities (fitting kitchen data)
-   ===================================================================== */
+/* =============================================================================
+   Rice on the Boil — physics engine (physics.js)
+   Pure JavaScript, no DOM.  Exposes window.RicePhysics (browser) and
+   module.exports (CommonJS); under JavaScriptCore it defines a global.
+   SI units throughout; temperatures handled in °C (converted to K where
+   Arrhenius or ideal-gas laws need absolute temperature); moisture X on a
+   DRY BASIS (kg water / kg dry solid).
+   Every equation here is taken from the project's science file ("Science
+   brief", stages 1-7); see README.txt.
+   ============================================================================= */
 (function (root) {
-'use strict';
+  'use strict';
 
-/* ---------------------------------------------------------------------
-   1. PARAMETERS
-   Every value carries its source. "illustrative" means: chosen inside the
-   range reported in the literature, not measured for a specific rice.
-   --------------------------------------------------------------------- */
-const PARAMS = {
-  rho_w:  { v: 1000,    unit: 'kg/m³',  src: 'Water density used for volume additivity (constant; 958 kg/m³ at 100 °C is a 4 % change, neglected).' },
-  c_w:    { v: 4180,    unit: 'J/(kg·K)', src: 'Specific heat of liquid water.' },
-  k_w:    { v: 0.60,    unit: 'W/(m·K)', src: 'Thermal conductivity of water used inside the grain (0.60–0.68 W/m·K between 25 and 100 °C).' },
-  rho_s:  { v: 1500,    unit: 'kg/m³',  src: 'True density of rice dry matter (≈1.45–1.52 g/cm³); illustrative.' },
-  c_s:    { v: 1600,    unit: 'J/(kg·K)', src: 'Carbohydrate specific heat, Choi & Okos (1986) composition model at ≈50 °C.' },
-  k_s:    { v: 0.25,    unit: 'W/(m·K)', src: 'Carbohydrate thermal conductivity, Choi & Okos (1986) composition model at ≈50 °C.' },
-  X0:     { v: 0.14,    unit: 'kg/kg db', src: 'Milled rice at ≈12 % wet basis storage moisture.' },
-  Xnat:   { v: 0.40,    unit: 'kg/kg db', src: 'Soaking plateau of ungelatinized (native) grain, ≈28–30 % wet basis; Bello et al. (2004, 2007) report plateaus of this order.' },
-  Xgel:   { v: 2.6,     unit: 'kg/kg db', src: 'Water held by fully cooked rice in excess water, ≈72 % wet basis (cooked rice is typically 65–75 % wb); illustrative.' },
-  D_nat:  { v: 3.6e-10, unit: 'm²/s',  src: 'Apparent water diffusivity in native (ungelatinized) starch, Briffaz et al. (2014) J. Food Eng. 121:143–151; taken here as the value at T_ref.' },
-  D_gel:  { v: 2.8e-10, unit: 'm²/s',  src: 'Apparent water diffusivity in gelatinized starch, Briffaz et al. (2014) J. Food Eng. 121:143–151; taken here as the value at T_ref.' },
-  D_const:{ v: 3.0e-10, unit: 'm²/s',  src: 'Single constant diffusivity for the simplest model rung (between the two Briffaz values).' },
-  T_ref:  { v: 95,      unit: '°C',    src: 'Reference temperature for the diffusivities and the gelatinization rate (Briffaz et al. cooked at up to 95 °C).' },
-  Ea_D:   { v: 32500,   unit: 'J/mol', src: 'Activation energy for water diffusion in rice, Bello et al. (soaking, swelling-sphere model, 32.5 kJ/mol). Cross-check: gives D ≈ 6.8×10⁻¹¹ m²/s at 45 °C, close to the ≈8.8×10⁻¹¹ m²/s average reported for white-rice soaking at 25–65 °C.' },
-  brownFactor: { v: 0.58, unit: '–', src: 'Brown rice: apparent D ≈ 1.9×10⁻¹⁰ vs ≈3.3×10⁻¹⁰ m²/s for milled rice, Briffaz et al. (2014) J. Food Eng. 141:99–106 (ratio 0.58).' },
-  bX:     { v: 0,       unit: 'kg dry/kg water', src: 'Optional moisture dependence D ∝ exp[b (X − X₀)] (Bello et al. report D varying with moisture). Off (0) by default; used only to explore a hypothesis.' },
-  T_on:   { v: 68,      unit: '°C',    src: 'Onset of rice-starch gelatinization in excess water (≈65–75 °C); illustrative.' },
-  kg_ref: { v: 0.05,    unit: '1/s',   src: 'First-order gelatinization rate constant at T_ref; illustrative, inside the range reviewed by Lund (1984) Crit. Rev. Food Sci. Nutr. 20:249.' },
-  Ea_g:   { v: 120000,  unit: 'J/mol', src: 'Activation energy of gelatinization; illustrative (reported values ≈ 70–250 kJ/mol, Lund 1984).' },
-  X_lo:   { v: 0.30,    unit: 'kg/kg db', src: 'Below this water content gelatinization does not proceed (water-limited); illustrative; must be below X_nat.' },
-  X_hi:   { v: 0.80,    unit: 'kg/kg db', src: 'Above this water content gelatinization is not water-limited; illustrative. Starch needs substantial water to gelatinize fully (Donovan 1979, Biopolymers 18:263). Constraint: X_lo must stay below X_nat, otherwise gelatinization can never start.' },
-  dH_gel: { v: 11000,   unit: 'J/kg dry', src: 'Gelatinization enthalpy of rice starch ≈10–13 J/g (DSC); used as an energy sink.' },
-  h:      { v: 1500,    unit: 'W/(m²·K)', src: 'Water-to-grain heat-transfer coefficient; Nu ≥ 2 gives h ≥ k_w/R ≈ 600–700 W/m²K for a 1 mm grain; natural convection gives ≈2000–3000.' },
-  G_done: { v: 0.90,    unit: '–',     src: 'Chosen criterion: the core counts as gelatinized when G at the centre reaches 0.9 (a definition, not a universal cooking time).' },
-  R_gas:  { v: 8.314,   unit: 'J/(mol·K)', src: 'Gas constant.' },
-  M_w:    { v: 0.018015,unit: 'kg/mol', src: 'Molar mass of water.' },
-  g:      { v: 9.81,    unit: 'm/s²',  src: 'Gravitational acceleration.' }
-};
-function defaults() { const o = {}; for (const k in PARAMS) o[k] = PARAMS[k].v; return o; }
-
-/* Grain presets: typical milled-rice dimensions (length × width × thickness, mm).
-   Long-slender ≈ Basmati type (L/B > 3), medium ≈ Sona Masoori type, short-bold ≈ Ponni/Japonica type. Illustrative. */
-const GRAIN_PRESETS = {
-  long:   { name: 'Long slender', L: 7.0, B: 1.8, Tk: 1.6 },
-  medium: { name: 'Medium',       L: 5.5, B: 2.2, Tk: 1.7 },
-  short:  { name: 'Short bold',   L: 5.0, B: 2.8, Tk: 2.0 }
-};
-
-/* ---------------------------------------------------------------------
-   2. WATER AND STEAM PROPERTIES
-   --------------------------------------------------------------------- */
-const K0 = 273.15;
-/* Antoine equation for water (p in mmHg, T in °C). Two published constant sets. */
-function psat(TC) {
-  const set = TC <= 100 ? [8.07131, 1730.63, 233.426] : [8.14019, 1810.94, 244.485];
-  return Math.pow(10, set[0] - set[1] / (set[2] + TC)) * 133.322368;
-}
-function boilingPoint(p) {
-  const mm = p / 133.322368;
-  const set = mm <= 760.1 ? [8.07131, 1730.63, 233.426] : [8.14019, 1810.94, 244.485];
-  return set[1] / (set[0] - Math.log10(mm)) - set[2];
-}
-/* Clausius–Clapeyron with constant h_fg — used only as an independent cross-check. */
-function boilingPointCC(p) {
-  const L = 2.257e6, M = 0.018015, R = 8.314;
-  return 1 / (1 / 373.124 - R * Math.log(p / 101325) / (L * M)) - K0;
-}
-/* Watson correlation for latent heat (J/kg). */
-function hfg(TC) {
-  const Tc = 647.096, T = TC + K0;
-  return 2.2565e6 * Math.pow(Math.max(0, (Tc - T) / (Tc - 373.15)), 0.38);
-}
-/* International standard atmosphere, troposphere. */
-function pressureAtAltitude(z) { return 101325 * Math.pow(1 - 2.25577e-5 * z, 5.25588); }
-function vapourDensity(TC, RH) { return (RH == null ? 1 : RH) * psat(TC) * 0.018015 / (8.314 * (TC + K0)); }
-/* Liquid water: density (approximation good to ~0.2 % for 0–100 °C), viscosity (Vogel), conductivity (fit). */
-function waterRho(TC) { return 1000 - 0.0178 * Math.pow(Math.abs(TC - 4), 1.7); }
-function waterMu(TC) { return 2.414e-5 * Math.pow(10, 247.8 / (TC + K0 - 140)); }
-function waterK(TC) { return 0.5706 + 1.756e-3 * TC - 6.46e-6 * TC * TC; }
-/* Natural convection from a sphere, Churchill (1983): Nu = 2 + 0.589 Ra^¼ / [1 + (0.469/Pr)^(9/16)]^(4/9). */
-function hSphereNatural(Rg, Tsurf, Twater) {
-  const Tf = (Tsurf + Twater) / 2, dT = Math.abs(Twater - Tsurf);
-  const rho = waterRho(Tf), mu = waterMu(Tf), k = waterK(Tf), c = 4180;
-  const beta = -(waterRho(Tf + 0.5) - waterRho(Tf - 0.5)) / rho;
-  const nu = mu / rho, alpha = k / (rho * c), D = 2 * Rg, Pr = nu / alpha;
-  const Ra = 9.81 * Math.max(beta, 1e-6) * dT * D * D * D / (nu * alpha);
-  const Nu = 2 + 0.589 * Math.pow(Ra, 0.25) / Math.pow(1 + Math.pow(0.469 / Pr, 9 / 16), 4 / 9);
-  return { h: Nu * k / D, Nu, Ra, Pr, hMin: 2 * k / D, k };
-}
-
-/* ---------------------------------------------------------------------
-   3. GEOMETRY
-   Shape exponent m: 0 slab (per unit face area), 1 cylinder (per unit length), 2 sphere.
-   --------------------------------------------------------------------- */
-const GEOM = { slab: 0, cylinder: 1, sphere: 2 };
-const GM = [1, Math.PI, 4 * Math.PI / 3];
-function volTo(r, m) { return GM[m] * Math.pow(r, m + 1); }
-function areaAt(r, m) { return (m + 1) * GM[m] * Math.pow(r, m); }
-function radiusOfVol(V, m) { return Math.pow(V / GM[m], 1 / (m + 1)); }
-/* Ellipsoid with full dimensions L × B × T (mm). Surface area: Knud Thomsen approximation (≈1 % error). */
-function ellipsoid(Lmm, Bmm, Tmm) {
-  const a = Lmm / 2e3, b = Bmm / 2e3, c = Tmm / 2e3, p = 1.6075;
-  const V = 4 / 3 * Math.PI * a * b * c;
-  const S = 4 * Math.PI * Math.pow((Math.pow(a * b, p) + Math.pow(a * c, p) + Math.pow(b * c, p)) / 3, 1 / p);
-  return { a, b, c, V, S, Rsphere: 3 * V / S, Rcyl: 2 * V / S, Lslab: V / S, minHalf: Math.min(a, b, c) };
-}
-/* Equivalent size with the same volume-to-surface ratio as the grain: R = (m+1) V/S. */
-function equivalentSize(preset, geom) {
-  const e = ellipsoid(preset.L, preset.B, preset.Tk);
-  return (GEOM[geom] + 1) * e.V / e.S;
-}
-
-/* ---------------------------------------------------------------------
-   4. GRAIN MODEL
-   --------------------------------------------------------------------- */
-const LEVELS = {
-  1: { DT: false, gelCap: false, Dstate: false, swell: false, short: 'L1 Fick', name: 'L1 · Textbook Fick: one constant D, fixed size, surface at the final water capacity from t = 0' },
-  2: { DT: false, gelCap: true,  Dstate: true,  swell: false, short: 'L2 + starch', name: 'L2 · + Starch state: water capacity and D change only where starch has gelatinized (needs heat and water)' },
-  3: { DT: false, gelCap: true,  Dstate: true,  swell: true,  short: 'L3 + swelling', name: 'L3 · + Swelling: shells grow as they take up water, so the grain boundary moves' },
-  4: { DT: true,  gelCap: true,  Dstate: true,  swell: true,  short: 'L4 + D(T)', name: 'L4 · + Temperature: D follows an Arrhenius law with the local temperature' }
-};
-function specVol(X, p) { return 1 / p.rho_s + X / p.rho_w; }           // m³ per kg dry solid
-function smooth01(x) { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); }
-/* D(T, G, X): starch state sets the reference value, temperature scales it (Arrhenius), moisture optionally. */
-function diffusivity(TC, p, fl, G, X) {
-  fl = fl || LEVELS[4];
-  let D = fl.Dstate ? p.D_nat * (1 - (G || 0)) + p.D_gel * (G || 0) : p.D_const;
-  if (fl.DT) D *= Math.exp(-p.Ea_D / p.R_gas * (1 / (TC + K0) - 1 / (p.T_ref + K0)));
-  if (p.bX) D *= Math.exp(p.bX * ((X == null ? p.X0 : X) - p.X0));
-  return D * (p.Dfactor || 1);
-}
-function gelRate(TC, X, p) {
-  const sT = 1 / (1 + Math.exp(-(TC - p.T_on) / 1.5));           // smooth onset over ≈±3 K
-  const kT = p.kg_ref * Math.exp(-p.Ea_g / p.R_gas * (1 / (TC + K0) - 1 / (p.T_ref + K0)));
-  return kT * sT * smooth01((X - p.X_lo) / (p.X_hi - p.X_lo));
-}
-function cellK(X, p) {                                            // parallel (volume-weighted) estimate
-  const phi = (X / p.rho_w) / specVol(X, p);
-  return phi * p.k_w + (1 - phi) * p.k_s;
-}
-function thomas(a, b, c, d, n) {                                   // a: sub, b: diag, c: super
-  const cp = new Float64Array(n), dp = new Float64Array(n), x = new Float64Array(n);
-  cp[0] = c[0] / b[0]; dp[0] = d[0] / b[0];
-  for (let i = 1; i < n; i++) {
-    const den = b[i] - a[i] * cp[i - 1];
-    cp[i] = c[i] / den; dp[i] = (d[i] - a[i] * dp[i - 1]) / den;
-  }
-  x[n - 1] = dp[n - 1];
-  for (let i = n - 2; i >= 0; i--) x[i] = dp[i] - cp[i] * x[i + 1];
-  return x;
-}
-
-/* Create a grain. o: {geom, R0 (m), N, X0, T0 (°C), level (1–4), flags (override), params (override),
-   water: true/false (solve water), heat: true/false (solve heat)} */
-function createGrain(o) {
-  const p = Object.assign(defaults(), o.params || {});
-  const fl = Object.assign({}, LEVELS[o.level || 4], o.flags || {});
-  const m = GEOM[o.geom || 'sphere'], N = o.N || 60, R0 = o.R0;
-  const X0 = o.X0 != null ? o.X0 : p.X0, T0 = o.T0 != null ? o.T0 : 25;
-  const rf = new Float64Array(N + 1), ms = new Float64Array(N);
-  for (let i = 0; i <= N; i++) rf[i] = R0 * i / N;
-  const v0 = specVol(X0, p);
-  for (let i = 0; i < N; i++) ms[i] = (volTo(rf[i + 1], m) - volTo(rf[i], m)) / v0;
-  const s = {
-    m, N, p, fl, ms, rf, R0, geom: o.geom || 'sphere',
-    X: new Float64Array(N).fill(X0), T: new Float64Array(N).fill(T0), G: new Float64Array(N),
-    solveWater: o.water !== false, solveHeat: o.heat !== false,
-    t: 0, ledger: { waterIn: 0, heatCond: 0, enthalpyIn: 0, gelHeat: 0 }, last: {}
+  /* ---------------------------------------------------------------------------
+     2.1 PARAMETERS — value, unit, source sentence
+     --------------------------------------------------------------------------- */
+  var PARAMS = {
+    rho_w:   { v: 1000,    unit: 'kg/m³',  src: 'Water density (science file §8).' },
+    c_w:     { v: 4180,    unit: 'J/(kg·K)', src: 'Specific heat of liquid water (science file §8).' },
+    k_w:     { v: 0.60,    unit: 'W/(m·K)', src: 'Thermal conductivity of water (science file §8).' },
+    rho_s:   { v: 1500,    unit: 'kg/m³',  src: 'Density of dry rice solid, Choi & Okos (1986) (science file §8).' },
+    c_s:     { v: 1600,    unit: 'J/(kg·K)', src: 'Specific heat of dry rice solid, Choi & Okos (1986).' },
+    k_s:     { v: 0.25,    unit: 'W/(m·K)', src: 'Thermal conductivity of dry rice solid, Choi & Okos (1986).' },
+    X0:      { v: 0.14,    unit: 'kg/kg db', src: 'Initial moisture of raw milled rice (science file §3.3).' },
+    Xnat:    { v: 0.40,    unit: 'kg/kg db', src: 'Moisture capacity of native (raw) starch, soaking plateau (science file §3.3).' },
+    Xgel:    { v: 2.6,     unit: 'kg/kg db', src: 'Surface moisture of fully gelatinized starch (science file §5.5; illustrative, inside published range).' },
+    D_nat:   { v: 3.6e-10, unit: 'm²/s',   src: 'Water diffusivity in native grain at T_ref = 95 °C, Briffaz et al. (2014).' },
+    D_gel:   { v: 2.8e-10, unit: 'm²/s',   src: 'Diffusivity in gelatinized grain at T_ref; gives D_gel(100 °C) ≈ 3.23e-10 (science file §4.2).' },
+    D_const: { v: 3.0e-10, unit: 'm²/s',   src: 'Constant diffusivity used in ladder rung L1 (science file §5).' },
+    T_ref:   { v: 95,      unit: '°C',     src: 'Reference temperature for D and k_g (science file §3.5, §5.3).' },
+    Ea_D:    { v: 32500,   unit: 'J/mol',  src: 'Activation energy of water diffusion, Bello, Tolaba & Suárez (science file §3.5).' },
+    brownFactor: { v: 0.58, unit: '–',     src: 'Brown rice: bran layer lowers effective D (×0.58) (science file §7).' },
+    bX:      { v: 0,       unit: '–',      src: 'Moisture dependence of D, exp[b(X−X0)]; 0 by default (science file §5.6).' },
+    T_on:    { v: 68,      unit: '°C',     src: 'Gelatinization onset temperature (science file §5.3; illustrative).' },
+    kg_ref:  { v: 0.05,    unit: '1/s',    src: 'Gelatinization rate constant at 95 °C (science file §5.3; illustrative, cf. Lund 1984).' },
+    Ea_g:    { v: 120000,  unit: 'J/mol',  src: 'Activation energy of gelatinization (science file §5.3; illustrative, cf. Lund 1984).' },
+    X_lo:    { v: 0.30,    unit: 'kg/kg db', src: 'Lower moisture limit of water availability f(X) (science file §5.3; must be < X_nat).' },
+    X_hi:    { v: 0.80,    unit: 'kg/kg db', src: 'Upper moisture limit of water availability f(X) (science file §5.3).' },
+    dH_gel:  { v: 11000,   unit: 'J/kg dry', src: 'Gelatinization enthalpy 11 J/g, Donovan (1979) (science file §5.4).' },
+    h:       { v: 1500,    unit: 'W/(m²·K)', src: 'Water-to-grain heat-transfer coefficient (science file §2.4; illustrative).' },
+    G_done:  { v: 0.90,    unit: '–',      src: '"Cooked" criterion: gelatinized fraction at the centre (a CHOSEN definition, science file §5).' },
+    R_gas:   { v: 8.314,   unit: 'J/(mol·K)', src: 'Universal gas constant.' },
+    M_w:     { v: 0.018015, unit: 'kg/mol', src: 'Molar mass of water.' },
+    g:       { v: 9.81,    unit: 'm/s²',   src: 'Gravitational acceleration.' },
+    /* pot (stage 1 / 6) */
+    C_v:     { v: 540,     unit: 'J/K',    src: 'Pot heat capacity 0.6 kg × 900 J/(kg·K) (science file §1).' },
+    UA_lid:  { v: 3.5,     unit: 'W/K',    src: 'Pot loss conductance, lid on (science file §1.4; illustrative).' },
+    UA_open: { v: 6.0,     unit: 'W/K',    src: 'Pot loss conductance, lid off (science file §1.4; illustrative).' },
+    km_lid:  { v: 4e-4,    unit: 'm/s',    src: 'Sub-boiling evaporation mass-transfer coefficient, lid on (science file §1.4; illustrative).' },
+    km_open: { v: 4e-3,    unit: 'm/s',    src: 'Sub-boiling evaporation mass-transfer coefficient, lid off (science file §1.4; illustrative).' },
+    potR:    { v: 0.09,    unit: 'm',      src: 'Pot radius; free surface A = π(0.09 m)² (science file §1).' },
+    RH:      { v: 0.5,     unit: '–',      src: 'Kitchen relative humidity (science file §1.4).' },
+    h_rest:  { v: 100,     unit: 'W/(m²·K)', src: 'Grain heat-transfer coefficient during the lid-on rest (science file §6).' }
   };
-  s.msTot = ms.reduce((a, b) => a + b, 0);
-  s.W0 = waterMass(s); s.E0 = energy(s);
-  return s;
-}
-function waterMass(s) { let w = 0; for (let i = 0; i < s.N; i++) w += s.ms[i] * s.X[i]; return w; }
-/* Stored energy relative to 0 °C: sensible heat of solid + water, plus gelatinization enthalpy already absorbed. */
-function energy(s) {
-  const p = s.p; let e = 0;
-  for (let i = 0; i < s.N; i++) e += s.ms[i] * ((p.c_s + s.X[i] * p.c_w) * s.T[i] + p.dH_gel * s.G[i]);
-  return e;
-}
-function centres(s) { const rc = new Float64Array(s.N); for (let i = 0; i < s.N; i++) rc[i] = (s.rf[i] + s.rf[i + 1]) / 2; return rc; }
-function grainVolumeFromShells(s) { let v = 0; for (let i = 0; i < s.N; i++) v += s.ms[i] * specVol(s.X[i], s.p); return v; }
-function surfaceXeq(s, bath) {
-  const p = s.p;
-  if (s.fl.gelCap) return p.Xnat + s.G[s.N - 1] * (p.Xgel - p.Xnat);
-  return bath.Xeq != null ? bath.Xeq : p.Xgel;
-}
-/* Advance one implicit step.
-   bath: {T: °C, wet: bool (liquid water at the surface), Xeq: surface capacity when gelCap is off, h} */
-function stepGrain(s, dt, bath) {
-  const { N, m, p, fl, ms, rf, X, T, G } = s;
-  const rc = centres(s);
-  const V = new Float64Array(N), rhod = new Float64Array(N), D = new Float64Array(N), k = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
-    V[i] = volTo(rf[i + 1], m) - volTo(rf[i], m);
-    rhod[i] = ms[i] / V[i];
-    D[i] = diffusivity(T[i], p, fl, G[i], X[i]);
-    k[i] = cellK(X[i], p);
+  function defaults() {
+    var o = {};
+    for (var k in PARAMS) o[k] = PARAMS[k].v;
+    return o;
   }
-  const R = rf[N], AR = areaAt(R, m), hS = bath.h != null ? bath.h : p.h;
-  const wet = bath.wet !== false;
+  function withParams(over) {
+    var p = defaults();
+    if (over) for (var k in over) if (over[k] !== undefined) p[k] = over[k];
+    return p;
+  }
 
-  /* ---- water: m_s,i (X_i' − X_i)/dt = a_{i−½}(X_{i−1}' − X_i') + a_{i+½}(X_{i+1}' − X_i') ---- */
-  const af = new Float64Array(N);                // face i+½ between cell i and i+1; af[N-1] = surface
-  for (let i = 0; i < N - 1; i++) {
-    const Af = areaAt(rf[i + 1], m), dr = rc[i + 1] - rc[i];
-    af[i] = 0.5 * (D[i] + D[i + 1]) * 0.5 * (rhod[i] + rhod[i + 1]) * Af / dr;
+  var K0 = 273.15;
+  function clamp(x, a, b) { return x < a ? a : (x > b ? b : x); }
+  function smoothstep(s) { s = clamp(s, 0, 1); return s * s * (3 - 2 * s); }
+
+  /* ---------------------------------------------------------------------------
+     2.2 WATER AND STEAM
+     --------------------------------------------------------------------------- */
+  var ANT_LO = { A: 8.07131, B: 1730.63, C: 233.426 };   // T ≤ 100 °C
+  var ANT_HI = { A: 8.14019, B: 1810.94, C: 244.485 };   // T > 100 °C
+  var MMHG = 133.322368;
+  function psat(TC) {
+    var s = TC <= 100 ? ANT_LO : ANT_HI;
+    return Math.pow(10, s.A - s.B / (s.C + TC)) * MMHG;
   }
-  const Xs = surfaceXeq(s, bath);
-  af[N - 1] = wet ? D[N - 1] * rhod[N - 1] * AR / (R - rc[N - 1]) : 0;
-  let Xn = X;
-  if (s.solveWater) {
-    const A = new Float64Array(N), B = new Float64Array(N), C = new Float64Array(N), Rh = new Float64Array(N);
-    for (let i = 0; i < N; i++) {
-      const aw = i > 0 ? af[i - 1] : 0, ae = af[i];
-      A[i] = -aw; C[i] = i < N - 1 ? -ae : 0;
-      B[i] = ms[i] / dt + aw + ae;
-      Rh[i] = ms[i] / dt * X[i] + (i === N - 1 ? ae * Xs : 0);
+  function boilingPoint(p) {
+    var lg = Math.log10(p / MMHG);
+    var T = ANT_LO.B / (ANT_LO.A - lg) - ANT_LO.C;
+    if (T > 100) T = ANT_HI.B / (ANT_HI.A - lg) - ANT_HI.C;
+    return T;
+  }
+  /* Clausius–Clapeyron, constant h_fg — cross-check only */
+  function boilingPointCC(p) {
+    var Rv = PARAMS.R_gas.v / PARAMS.M_w.v, hfg0 = 2.2565e6, T0 = 373.15, p0 = 101325;
+    return 1 / (1 / T0 - (Rv / hfg0) * Math.log(p / p0)) - K0;
+  }
+  function hfg(TC) {   // Watson correlation
+    var TK = TC + K0;
+    return 2.2565e6 * Math.pow(Math.max(647.096 - TK, 0) / (647.096 - 373.15), 0.38);
+  }
+  function pressureAtAltitude(z) { return 101325 * Math.pow(1 - 2.25577e-5 * z, 5.25588); }
+  function vapourDensity(TC, RH) {
+    if (RH === undefined) RH = 1;
+    return RH * psat(TC) * PARAMS.M_w.v / (PARAMS.R_gas.v * (TC + K0));
+  }
+  /* property fits used only for the natural-convection estimate */
+  function waterRho(TC) {
+    return 1000 * (1 - (TC + 288.9414) / (508929.2 * (TC + 68.12963)) * Math.pow(TC - 3.9863, 2));
+  }
+  function waterMu(TC) { return 2.414e-5 * Math.pow(10, 247.8 / (TC + K0 - 140)); } // Vogel form
+  function waterK(TC) { var T = TC + K0; return -0.5752 + 6.397e-3 * T - 8.151e-6 * T * T; }
+  /* Churchill (1983) natural convection from a sphere */
+  function hSphereNatural(R, Ts, Tw) {
+    var Tf = 0.5 * (Ts + Tw), D = 2 * R, cw = PARAMS.c_w.v, g = PARAMS.g.v;
+    var rho = waterRho(Tf), mu = waterMu(Tf), k = waterK(Tf);
+    var beta = -(waterRho(Tf + 0.5) - waterRho(Tf - 0.5)) / rho;
+    beta = Math.max(beta, 1e-6);
+    var nu = mu / rho, al = k / (rho * cw), Pr = mu * cw / k;
+    var Ra = g * beta * Math.abs(Tw - Ts) * D * D * D / (nu * al);
+    var Nu = 2 + 0.589 * Math.pow(Ra, 0.25) / Math.pow(1 + Math.pow(0.469 / Pr, 9 / 16), 4 / 9);
+    return { h: Nu * k / D, Nu: Nu, Ra: Ra, Pr: Pr, hMin: 2 * k / D, k: k };
+  }
+
+  /* ---------------------------------------------------------------------------
+     2.3 GEOMETRY
+     --------------------------------------------------------------------------- */
+  var GEOM = { slab: 0, cylinder: 1, sphere: 2 };
+  var GEOM_NAMES = ['slab', 'cylinder', 'sphere'];
+  var GM = [1, Math.PI, 4 * Math.PI / 3];
+  function geomIndex(g) { return typeof g === 'number' ? g : (GEOM[g] !== undefined ? GEOM[g] : 2); }
+  function volTo(r, m) { return GM[m] * Math.pow(r, m + 1); }
+  function areaAt(r, m) { return (m + 1) * GM[m] * Math.pow(r, m); }
+  function radiusOfVol(V, m) { return Math.pow(Math.max(V, 0) / GM[m], 1 / (m + 1)); }
+
+  var GRAIN_PRESETS = {
+    long:   { name: 'Long slender (Basmati type)', L: 7.0, B: 1.8, T: 1.6 },
+    medium: { name: 'Medium (Sona Masoori type)',  L: 5.5, B: 2.2, T: 1.7 },
+    short:  { name: 'Short bold',                  L: 5.0, B: 2.8, T: 2.0 }
+  };
+  /* dimensions in mm → V (m³), S (m²); Knud Thomsen p = 1.6075 */
+  function ellipsoid(L, B, T) {
+    var a = L / 2e3, b = B / 2e3, c = T / 2e3, p = 1.6075;
+    var V = 4 / 3 * Math.PI * a * b * c;
+    var ap = Math.pow(a, p), bp = Math.pow(b, p), cp = Math.pow(c, p);
+    var S = 4 * Math.PI * Math.pow((ap * bp + ap * cp + bp * cp) / 3, 1 / p);
+    return { V: V, S: S, a: a, b: b, c: c };
+  }
+  function equivalentSize(preset, geom) {
+    var g = typeof preset === 'string' ? GRAIN_PRESETS[preset] : preset;
+    var e = ellipsoid(g.L, g.B, g.T), m = geomIndex(geom);
+    return (m + 1) * e.V / e.S;
+  }
+
+  /* ---------------------------------------------------------------------------
+     2.4 GRAIN MODEL — radial finite volumes that follow the dry solid
+     --------------------------------------------------------------------------- */
+  var LEVELS = [
+    null,
+    { id: 1, short: 'L1', name: 'Constant D, fixed size, surface at X_gel',
+      fl: { DT: false, gelCap: false, Dstate: false, swell: false } },
+    { id: 2, short: 'L2', name: '+ starch state sets surface capacity and D',
+      fl: { DT: false, gelCap: true, Dstate: true, swell: false } },
+    { id: 3, short: 'L3', name: '+ swelling (moving boundary)',
+      fl: { DT: false, gelCap: true, Dstate: true, swell: true } },
+    { id: 4, short: 'L4', name: '+ D(T) Arrhenius (full model)',
+      fl: { DT: true, gelCap: true, Dstate: true, swell: true } }
+  ];
+  function levelFlags(level) {
+    if (level && typeof level === 'object') return level;
+    var L = LEVELS[level || 4] || LEVELS[4];
+    var f = L.fl; return { DT: f.DT, gelCap: f.gelCap, Dstate: f.Dstate, swell: f.swell };
+  }
+  function specVol(X, p) { return 1 / p.rho_s + X / p.rho_w; }
+  function arrhenius(TC, Ea, p) { return Math.exp(-Ea / p.R_gas * (1 / (TC + K0) - 1 / (p.T_ref + K0))); }
+  function diffusivity(TC, p, fl, G, X, Dfactor) {
+    var base = fl.Dstate ? p.D_nat * (1 - G) + p.D_gel * G : p.D_const;
+    var a = fl.DT ? arrhenius(TC, p.Ea_D, p) : 1;
+    return base * a * Math.exp(p.bX * (X - p.X0)) * (Dfactor === undefined ? 1 : Dfactor);
+  }
+  function gelRate(TC, X, p) {
+    var k = p.kg_ref * arrhenius(TC, p.Ea_g, p);
+    var on = 1 / (1 + Math.exp(-(TC - p.T_on) / 1.5));
+    return k * on * smoothstep((X - p.X_lo) / (p.X_hi - p.X_lo));
+  }
+  function cellK(X, p) {
+    var phi = (X / p.rho_w) / (1 / p.rho_s + X / p.rho_w);
+    return phi * p.k_w + (1 - phi) * p.k_s;
+  }
+  function grainAlpha(X, p) {
+    p = p || defaults();
+    return cellK(X, p) * specVol(X, p) / (p.c_s + X * p.c_w);
+  }
+  function DgelAt(TC, p, Dfactor) {
+    p = p || defaults();
+    return p.D_gel * arrhenius(TC, p.Ea_D, p) * (Dfactor === undefined ? 1 : Dfactor);
+  }
+
+  function makeGrain(o) {
+    var p = o.p || defaults();
+    var m = geomIndex(o.geom === undefined ? 'sphere' : o.geom);
+    var N = o.N || 60, R0 = o.R;
+    var X0 = o.X0 === undefined ? p.X0 : o.X0, T0 = o.T0 === undefined ? 25 : o.T0;
+    var s = {
+      p: p, m: m, N: N, R0: R0, fl: levelFlags(o.level), Dfactor: o.Dfactor === undefined ? 1 : o.Dfactor,
+      ms: new Float64Array(N), X: new Float64Array(N), T: new Float64Array(N), G: new Float64Array(N),
+      rf: new Float64Array(N + 1), rc: new Float64Array(N), Vg: new Float64Array(N),
+      Win: new Float64Array(N + 1),      // inward water flow through face i (kg/s), last step
+      waterIn: 0, heatCond: 0, enthalpyIn: 0, gelHeat: 0, t: 0, lastWs: 0, lastQs: 0
+    };
+    for (var i = 0; i <= N; i++) s.rf[i] = R0 * i / N;
+    for (i = 0; i < N; i++) {
+      s.rc[i] = 0.5 * (s.rf[i] + s.rf[i + 1]);
+      s.Vg[i] = volTo(s.rf[i + 1], m) - volTo(s.rf[i], m);
+      s.ms[i] = s.Vg[i] / specVol(X0, p);
+      s.X[i] = X0; s.T[i] = T0; s.G[i] = o.G0 || 0;
     }
-    Xn = thomas(A, B, C, Rh, N);
+    s.msTotal = 0; for (i = 0; i < N; i++) s.msTotal += s.ms[i];
+    s.water0 = grainWater(s); s.energy0 = grainEnergy(s); s.V0 = volTo(R0, m);
+    return s;
   }
-  /* outward water flow through each face (kg/s), from cell i towards i+1 (surface: out of the grain) */
-  const Wf = new Float64Array(N);
-  for (let i = 0; i < N - 1; i++) Wf[i] = s.solveWater ? -af[i] * (Xn[i + 1] - Xn[i]) : 0;
-  Wf[N - 1] = s.solveWater ? -af[N - 1] * (Xs - Xn[N - 1]) : 0;
+  function cloneGrain(s) {
+    var c = {};
+    for (var k in s) {
+      var v = s[k];
+      c[k] = (v instanceof Float64Array) ? new Float64Array(v) : v;
+    }
+    c.fl = { DT: s.fl.DT, gelCap: s.fl.gelCap, Dstate: s.fl.Dstate, swell: s.fl.swell };
+    return c;
+  }
+  function grainWater(s) { var w = 0; for (var i = 0; i < s.N; i++) w += s.ms[i] * s.X[i]; return w; }
+  function grainEnergy(s) {
+    var p = s.p, e = 0;
+    for (var i = 0; i < s.N; i++) e += s.ms[i] * ((p.c_s + s.X[i] * p.c_w) * s.T[i] + p.dH_gel * s.G[i]);
+    return e;
+  }
+  function surfaceXeq(s, bath) {
+    var p = s.p;
+    if (s.fl.gelCap) return p.Xnat + s.G[s.N - 1] * (p.Xgel - p.Xnat);
+    return bath.Xeq;
+  }
 
-  /* ---- gelatinization: exact first-order update with frozen rate ---- */
-  const dG = new Float64Array(N), Gn = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
-    const kr = gelRate(T[i], Xn[i], p);
-    Gn[i] = 1 - (1 - G[i]) * Math.exp(-kr * dt);
-    dG[i] = Gn[i] - G[i];
+  /* tridiagonal solver (Thomas) — a: sub, b: diag, c: super, d: rhs */
+  function thomas(a, b, c, d, n, out) {
+    var cp = new Float64Array(n), dp = new Float64Array(n);
+    cp[0] = c[0] / b[0]; dp[0] = d[0] / b[0];
+    for (var i = 1; i < n; i++) {
+      var den = b[i] - a[i] * cp[i - 1];
+      cp[i] = c[i] / den; dp[i] = (d[i] - a[i] * dp[i - 1]) / den;
+    }
+    out[n - 1] = dp[n - 1];
+    for (i = n - 2; i >= 0; i--) out[i] = dp[i] - cp[i] * out[i + 1];
+    return out;
   }
 
-  /* ---- energy: (C_i' T_i' − C_i T_i)/dt = conduction + c_w·(enthalpy carried by water) − gel sink ---- */
-  let Tn = T;
-  const bf = new Float64Array(N);
-  for (let i = 0; i < N - 1; i++) {
-    const Af = areaAt(rf[i + 1], m);
-    bf[i] = Af / ((rf[i + 1] - rc[i]) / k[i] + (rc[i + 1] - rf[i + 1]) / k[i + 1]);
-  }
-  bf[N - 1] = AR / (1 / hS + (R - rc[N - 1]) / k[N - 1]);
-  const Tb = bath.T;
-  if (s.solveHeat) {
-    const A = new Float64Array(N), B = new Float64Array(N), C = new Float64Array(N), Rh = new Float64Array(N);
-    for (let i = 0; i < N; i++) {
-      const Cold = ms[i] * (p.c_s + X[i] * p.c_w), Cnew = ms[i] * (p.c_s + Xn[i] * p.c_w);
-      B[i] = Cnew / dt; Rh[i] = Cold / dt * T[i] - ms[i] * p.dH_gel * dG[i] / dt;
-      if (i > 0) {                                      // west face (i−½), outward flow from i−1 into i is Wf[i−1]
-        const w = Wf[i - 1], b = bf[i - 1];
-        B[i] += b; A[i] = -b;
-        if (w >= 0) A[i] -= p.c_w * w; else B[i] += p.c_w * (-w);
+  /* one implicit step of the grain; bath = {T, wet, Xeq, h} */
+  function stepGrain(s, dt, bath) {
+    var p = s.p, N = s.N, m = s.m, fl = s.fl, i;
+    var a = new Float64Array(N), b = new Float64Array(N), c = new Float64Array(N), d = new Float64Array(N);
+    var Dc = new Float64Array(N), rd = new Float64Array(N), af = new Float64Array(N + 1);
+    var R = s.rf[N], AR = areaAt(R, m);
+    var Xold = new Float64Array(s.X), Gold = new Float64Array(s.G);
+    /* (1) water — backward Euler, Fick relative to the solid: j = −ρ_d D ∂X/∂r */
+    for (i = 0; i < N; i++) {
+      Dc[i] = diffusivity(s.T[i], p, fl, s.G[i], s.X[i], s.Dfactor);
+      rd[i] = s.ms[i] / s.Vg[i];
+    }
+    for (i = 1; i < N; i++) {      // face i between cell i-1 and i
+      af[i] = 0.5 * (Dc[i - 1] + Dc[i]) * 0.5 * (rd[i - 1] + rd[i]) * areaAt(s.rf[i], m) / (s.rc[i] - s.rc[i - 1]);
+    }
+    var Xeq = surfaceXeq(s, bath);
+    var as = bath.wet ? Dc[N - 1] * rd[N - 1] * AR / (R - s.rc[N - 1]) : 0;
+    af[0] = 0; af[N] = as;
+    for (i = 0; i < N; i++) {
+      var mt = s.ms[i] / dt;
+      a[i] = -af[i]; c[i] = i < N - 1 ? -af[i + 1] : 0;
+      b[i] = mt + af[i] + (i < N - 1 ? af[i + 1] : as);
+      d[i] = mt * s.X[i] + (i === N - 1 ? as * Xeq : 0);
+    }
+    var Xn = thomas(a, b, c, d, N, new Float64Array(N));
+    for (i = 1; i < N; i++) s.Win[i] = af[i] * (Xn[i] - Xn[i - 1]);   // inward through face i
+    var Ws = as * (Xeq - Xn[N - 1]);
+    s.Win[N] = Ws; s.Win[0] = 0;
+    /* (2) gelatinization — exact first-order update with old T, new X */
+    var dG = new Float64Array(N);
+    for (i = 0; i < N; i++) {
+      var kk = gelRate(s.T[i], Xn[i], p);
+      var Gn = 1 - (1 - s.G[i]) * Math.exp(-kk * dt);
+      dG[i] = Gn - s.G[i]; s.G[i] = Gn;
+    }
+    /* (3) energy — implicit; conduction + upwinded c_w W T + gelatinization sink */
+    var kc = new Float64Array(N), Kf = new Float64Array(N + 1);
+    for (i = 0; i < N; i++) kc[i] = cellK(Xn[i], p);
+    for (i = 1; i < N; i++) {
+      Kf[i] = areaAt(s.rf[i], m) / ((s.rf[i] - s.rc[i - 1]) / kc[i - 1] + (s.rc[i] - s.rf[i]) / kc[i]);
+    }
+    var hh = bath.h === undefined ? p.h : bath.h;
+    var Ks = AR / ((hh > 0 ? 1 / hh : Infinity) + (R - s.rc[N - 1]) / kc[N - 1]);
+    if (!(hh > 0)) Ks = 0;
+    var cw = p.c_w;
+    for (i = 0; i < N; i++) {
+      var Cold = s.ms[i] * (p.c_s + Xold[i] * cw), Cnew = s.ms[i] * (p.c_s + Xn[i] * cw);
+      a[i] = i > 0 ? -Kf[i] : 0;
+      c[i] = i < N - 1 ? -Kf[i + 1] : 0;
+      b[i] = Cnew / dt + (i > 0 ? Kf[i] : 0) + (i < N - 1 ? Kf[i + 1] : Ks);
+      d[i] = Cold * s.T[i] / dt - s.ms[i] * p.dH_gel * dG[i] / dt;
+    }
+    for (i = 1; i < N; i++) {        // face i: inner cell i-1, outer cell i; w = c_w × inward flow
+      var w = cw * s.Win[i];
+      if (w > 0) {                   // carries T of outer cell i
+        c[i - 1] -= w;               // inner gains +w T_i
+        b[i] += w;                   // outer loses  w T_i
+      } else {                       // outward flow carries T of inner cell i-1
+        b[i - 1] -= w;               // inner loses |w| T_{i-1}
+        a[i] += w;                   // outer gains |w| T_{i-1}
       }
-      if (i < N - 1) {                                  // east face (i+½)
-        const w = Wf[i], b = bf[i];
-        B[i] += b; C[i] = -b;
-        if (w >= 0) B[i] += p.c_w * w; else C[i] -= p.c_w * (-w);
-      } else {                                          // surface face
-        const w = Wf[i], b = bf[i];
-        B[i] += b; Rh[i] += b * Tb;
-        if (w >= 0) B[i] += p.c_w * w; else Rh[i] += p.c_w * (-w) * Tb;
+    }
+    var ws = cw * Ws, Tb = bath.T;
+    if (ws > 0) d[N - 1] += ws * Tb; else b[N - 1] -= ws;
+    d[N - 1] += Ks * Tb;
+    var Tn = thomas(a, b, c, d, N, new Float64Array(N));
+    /* (4) ledgers */
+    var Qs = Ks * (Tb - Tn[N - 1]);
+    var Hs = ws > 0 ? ws * Tb : ws * Tn[N - 1];
+    s.heatCond += dt * Qs; s.enthalpyIn += dt * Hs; s.waterIn += dt * Ws;
+    for (i = 0; i < N; i++) s.gelHeat += s.ms[i] * p.dH_gel * dG[i];
+    s.lastWs = Ws; s.lastQs = Qs; s.lastHs = Hs;
+    for (i = 0; i < N; i++) { s.X[i] = Xn[i]; s.T[i] = Tn[i]; }
+    /* (5) swelling — faces follow the dry solid; volumes are additive */
+    if (fl.swell) {
+      var V = 0;
+      for (i = 0; i < N; i++) {
+        var Vi = s.ms[i] * specVol(s.X[i], p);
+        V += Vi; s.Vg[i] = Vi; s.rf[i + 1] = radiusOfVol(V, m);
+      }
+      for (i = 0; i < N; i++) s.rc[i] = 0.5 * (s.rf[i] + s.rf[i + 1]);
+    }
+    s.t += dt;
+    return s;
+  }
+
+  function grainSummary(s) {
+    var p = s.p, N = s.N, i, W = 0, Ms = 0, sT = 0, sG = 0, C = 0, Vsh = 0;
+    for (i = 0; i < N; i++) {
+      var Ci = s.ms[i] * (p.c_s + s.X[i] * p.c_w);
+      W += s.ms[i] * s.X[i]; Ms += s.ms[i]; C += Ci; sT += Ci * s.T[i]; sG += s.ms[i] * s.G[i];
+      Vsh += s.ms[i] * specVol(s.X[i], p);
+    }
+    var E = sT + p.dH_gel * sG;
+    var R = s.rf[N];
+    var wres = (W - s.water0 - s.waterIn) / Math.max(s.water0, 1e-300);
+    var escale = Math.max(Math.abs(s.energy0), Math.abs(s.heatCond) + Math.abs(s.enthalpyIn), 1e-300);
+    var eres = (E - s.energy0 - s.heatCond - s.enthalpyIn) / escale;
+    return {
+      t: s.t, R: R, RR0: R / s.R0, Xm: W / Ms, Xc: s.X[0], Xs: s.X[N - 1], Tc: s.T[0], Ts: s.T[N - 1],
+      Tm: sT / C, Gc: s.G[0], Gm: sG / Ms, Gs: s.G[N - 1], water: W, waterIn: s.waterIn, waterResidual: wres,
+      energy: E, heatCond: s.heatCond, enthalpyIn: s.enthalpyIn, gelHeat: s.gelHeat, energyResidual: eres,
+      Vgeom: volTo(R, s.m), Vshell: Vsh, msTotal: Ms, Ws: s.lastWs, Qs: s.lastQs,
+      Xeq: s.fl.gelCap ? p.Xnat + s.G[N - 1] * (p.Xgel - p.Xnat) : undefined
+    };
+  }
+  function grainProfile(s) {
+    return {
+      t: s.t, R: s.rf[s.N], rc: Array.prototype.slice.call(s.rc), rf: Array.prototype.slice.call(s.rf),
+      X: Array.prototype.slice.call(s.X), T: Array.prototype.slice.call(s.T), G: Array.prototype.slice.call(s.G)
+    };
+  }
+  /* radius where G crosses g (gelatinization front, outside-in); 0 if none */
+  function frontRadius(prof, g) {
+    var G = prof.G, rc = prof.rc, n = G.length;
+    if (G[0] >= g) return 0;
+    for (var i = 1; i < n; i++) {
+      if (G[i] >= g) {
+        var f = (g - G[i - 1]) / (G[i] - G[i - 1]);
+        return rc[i - 1] + f * (rc[i] - rc[i - 1]);
       }
     }
-    Tn = thomas(A, B, C, Rh, N);
+    return prof.R;
   }
-  /* ledgers (all exact for the discrete scheme) */
-  const wIn = -Wf[N - 1] * dt;
-  const qCond = bf[N - 1] * (Tb - Tn[N - 1]) * dt;
-  const hIn = (Wf[N - 1] < 0 ? -Wf[N - 1] * Tb : -Wf[N - 1] * Tn[N - 1]) * p.c_w * dt;
-  let gelH = 0; for (let i = 0; i < N; i++) gelH += ms[i] * p.dH_gel * dG[i];
-  s.ledger.waterIn += wIn; s.ledger.heatCond += qCond; s.ledger.enthalpyIn += hIn; s.ledger.gelHeat += gelH;
-  s.X = Float64Array.from(Xn); s.T = Float64Array.from(Tn); s.G = Gn;
-  /* swelling: move the faces so that each shell holds m_s (1/ρ_s + X/ρ_w) of volume */
-  if (fl.swell) {
-    let cum = 0;
-    for (let i = 0; i < N; i++) { cum += ms[i] * specVol(s.X[i], p); s.rf[i + 1] = radiusOfVol(cum, m); }
-  }
-  s.t += dt;
-  s.last = { dt, wIn, qCond, hIn, gelH, Xs, Tb, Dsurf: D[N - 1], h: hS };
-  return s;
-}
 
-/* Bulk quantities of a grain state. */
-function grainSummary(s) {
-  const { N, ms, p } = s;
-  let W = 0, Tm = 0, Gm = 0;
-  for (let i = 0; i < N; i++) { W += ms[i] * s.X[i]; Tm += ms[i] * (p.c_s + s.X[i] * p.c_w) * s.T[i]; Gm += ms[i] * s.G[i]; }
-  let Cs = 0; for (let i = 0; i < N; i++) Cs += ms[i] * (p.c_s + s.X[i] * p.c_w);
-  const Vgeom = volTo(s.rf[N], s.m), Vshell = grainVolumeFromShells(s);
-  return {
-    t: s.t, R: s.rf[N], Xmean: W / s.msTot, Xc: s.X[0], Xs: s.X[N - 1],
-    Tc: s.T[0], Ts: s.T[N - 1], Tmean: Tm / Cs, Gc: s.G[0], Gmean: Gm / s.msTot, Gs: s.G[N - 1],
-    water: W, waterIn: s.ledger.waterIn, waterResidual: W - s.W0 - s.ledger.waterIn,
-    energy: energy(s), energyIn: s.ledger.heatCond + s.ledger.enthalpyIn,
-    energyResidual: energy(s) - s.E0 - s.ledger.heatCond - s.ledger.enthalpyIn,
-    heatCond: s.ledger.heatCond, enthalpyIn: s.ledger.enthalpyIn, gelHeat: s.ledger.gelHeat,
-    dryMass: s.msTot, Vgeom, Vshell, wb: (W / s.msTot) / (1 + W / s.msTot)
-  };
-}
-function profile(s) {
-  const rc = centres(s);
-  return { r: Array.from(rc), R: s.rf[s.N], T: Array.from(s.T), X: Array.from(s.X), G: Array.from(s.G), rf: Array.from(s.rf) };
-}
-
-/* Time-step rule: small steps just after a change (accuracy), larger steps later (speed). */
-function nextDt(tLocal, opt) {
-  return Math.min(opt.dtMax, Math.max(opt.dtMin, opt.frac * tLocal));
-}
-
-/* Run a grain through a schedule of baths.
-   cfg: {grain: createGrain options, presoak: {TC, t} | null, bath: {TC, Xeq, h}, tEnd, nOut, logOut, dtMax, keepProfiles}
-   The presoak phase (if any) is run first; time t = 0 is the start of the main bath. */
-function runGrain(cfg) {
-  const s = createGrain(cfg.grain);
-  const p = s.p;
-  const opt = { dtMin: cfg.dtMin || 2e-3, dtMax: cfg.dtMax || 1, frac: cfg.frac || 0.02 };
-  let soakInfo = null;
-  if (cfg.presoak && cfg.presoak.t > 0) {
-    const T0 = cfg.presoak.TC;
-    s.T.fill(T0); s.E0 = energy(s);
-    let tl = 0;
-    const bath = { T: T0, wet: true, Xeq: p.Xnat, h: cfg.bath.h };
-    while (tl < cfg.presoak.t - 1e-9) {
-      const dt = Math.min(nextDt(tl, { dtMin: opt.dtMin, dtMax: Math.max(opt.dtMax, 5), frac: opt.frac }), cfg.presoak.t - tl);
-      stepGrain(s, dt, bath); tl += dt;
+  function outputTimes(dur, out) {
+    out = out || {};
+    var n = out.n || 200, ts = [0], k;
+    if (out.log) {
+      var t0 = out.tmin || 0.02;
+      for (k = 0; k < n; k++) ts.push(t0 * Math.pow(dur / t0, k / (n - 1)));
+    } else {
+      for (k = 1; k <= n; k++) ts.push(dur * k / n);
     }
-    soakInfo = { Xmean: grainSummary(s).Xmean, R: s.rf[s.N], waterIn: s.ledger.waterIn };
-    // keep ledgers continuous but re-zero the clock
-    s.t = 0;
+    if (out.extra) ts = ts.concat(out.extra.filter(function (x) { return x > 0 && x < dur; }));
+    ts.sort(function (x, y) { return x - y; });
+    var u = [ts[0]];
+    for (k = 1; k < ts.length; k++) if (ts[k] - u[u.length - 1] > 1e-9) u.push(ts[k]);
+    return u;
   }
-  const out = { t: [], Tc: [], Ts: [], Tmean: [], Xc: [], Xs: [], Xmean: [], Gc: [], Gmean: [], R: [], waterIn: [], energyIn: [],
-    waterResidual: [], energyResidual: [], profiles: [], soakInfo, grain: s };
-  const tEnd = cfg.tEnd, nOut = cfg.nOut || 240;
-  const outTimes = [];
-  if (cfg.logOut) {
-    const t0 = cfg.logStart || 0.05;
-    outTimes.push(0);
-    for (let i = 0; i < nOut; i++) outTimes.push(t0 * Math.pow(tEnd / t0, i / (nOut - 1)));
-  } else for (let i = 0; i <= nOut; i++) outTimes.push(tEnd * i / nOut);
-  const record = () => {
-    const g = grainSummary(s);
-    out.t.push(s.t); out.Tc.push(g.Tc); out.Ts.push(g.Ts); out.Tmean.push(g.Tmean); out.Xc.push(g.Xc); out.Xs.push(g.Xs);
-    out.Xmean.push(g.Xmean); out.Gc.push(g.Gc); out.Gmean.push(g.Gmean); out.R.push(g.R); out.waterIn.push(g.waterIn);
-    out.energyIn.push(g.energyIn); out.waterResidual.push(g.waterResidual); out.energyResidual.push(g.energyResidual);
-    if (cfg.keepProfiles !== false) out.profiles.push(profile(s));
-  };
-  const bathAt = typeof cfg.bath === 'function' ? cfg.bath : () => ({ T: cfg.bath.TC, wet: true, Xeq: cfg.bath.Xeq, h: cfg.bath.h });
-  s.t = 0; record();
-  let k = 1, tl = 0;
-  while (k < outTimes.length) {
-    const target = outTimes[k];
-    while (s.t < target - 1e-12) {
-      const dt = Math.min(nextDt(tl, opt), target - s.t);
-      stepGrain(s, dt, bathAt(s.t)); tl += dt;
-    }
-    record(); k++;
-  }
-  out.events = grainEvents(out, cfg, p);
-  out.final = grainSummary(s);
-  return out;
-}
-function crossTime(t, y, level) {                                  // first time y reaches level (linear interpolation)
-  if (!y.length || y[0] == null) return null;
-  if (y[0] === level) return t[0];
-  for (let i = 1; i < y.length; i++) {
-    if (y[i] == null || y[i - 1] == null) continue;
-    const a = y[i - 1] - level, b = y[i] - level;
-    if (a * b < 0 || b === 0) return t[i - 1] + (level - y[i - 1]) * (t[i] - t[i - 1]) / (y[i] - y[i - 1]);
-  }
-  return null;
-}
-function grainEvents(out, cfg, p) {
-  const TbT = typeof cfg.bath === 'function' ? null : cfg.bath.TC;
-  const e = {};
-  if (TbT != null) {
-    const T0 = out.Tc[0];
-    if (Math.abs(TbT - T0) > 1) e.tCentreWithin1K = crossTime(out.t, out.Tc.map(v => Math.abs(TbT - v)), 1);
-    e.tCentre99 = Math.abs(TbT - T0) > 1e-9 ? crossTime(out.t, out.Tc.map(v => (v - T0) / (TbT - T0)), 0.99) : null;
-  }
-  e.tCoreGel = crossTime(out.t, out.Gc, p.G_done);
-  const X0 = out.Xc[0];
-  return e;
-}
 
-/* ---------------------------------------------------------------------
-   5. POT MODEL
-   Control volume A: the free liquid water in the pot plus the vessel (lumped temperature Tp).
-   Control volume B: the grains (N identical representative grains, each a moving-boundary CV).
-   Steam leaves CV A through the free surface.
-   Energy of CV A:  d/dt[(M c_w + C_v) Tp] = P − UA(Tp − T_amb) − Q_grains − ṁ_g c_w Tp − ṁ_ev (c_w Tp + h_fg)
-   Mass of CV A:    dM/dt = −ṁ_g − ṁ_ev
-   At the boiling point Tp is capped and the surplus energy boils water off.
-   --------------------------------------------------------------------- */
-function potDefaults() {
-  return {
-    water: 1.0, Cv: 0.6 * 900, area: Math.PI * 0.09 * 0.09, Tamb: 25, T0: 25, RH: 0.5,
-    Pboil: 1500, Psim: 400, simmerAfterBoil: false, simmerDelay: 0,
-    lid: true, UA_lid: 3.5, UA_open: 6.0, km_lid: 4e-4, km_open: 4e-3,
-    altitude: 0, cookerGauge: 0, tEnd: 1800, dt: 0.5,
-    rice: null    // {massRaw, grain: createGrain options, addAt: 'start'|'boil', presoak:{TC,t}, restTime}
-  };
-}
-function runPot(cfgIn) {
-  const c = Object.assign(potDefaults(), cfgIn);
-  const p = defaults();
-  const pAbs = pressureAtAltitude(c.altitude) + c.cookerGauge;
-  const Tb = boilingPoint(pAbs), sealed = c.cookerGauge > 0;
-  const km = sealed ? 0 : (c.lid ? c.km_lid : c.km_open);
-  const UA = (c.lid || sealed) ? c.UA_lid : c.UA_open;
-  let Tp = c.T0, M = c.water, t = 0, boiled = false, tBoil = null;
-  let added = !c.rice || c.rice.addAt !== 'boil', tAdded = added ? 0 : null;
-  let dry = false, tDry = null, Mevap = 0, scorchMax = c.T0;
-  const led = { Pin: 0, loss: 0, latent: 0, steamEnth: 0, toGrains: 0, waterToGrains: 0 };
-  let grain = null, Ng = 0;
-  if (c.rice) {
-    const g = Object.assign({}, c.rice.grain);
-    const soaked = c.rice.presoak && c.rice.presoak.t > 0;
-    g.T0 = soaked ? c.rice.presoak.TC : c.Tamb;
-    grain = createGrain(g);
-    if (soaked) {                                    // soaking happens before (and outside) the pot control volume
-      let tl = 0; const bath = { T: c.rice.presoak.TC, wet: true, Xeq: grain.p.Xnat };
-      while (tl < c.rice.presoak.t - 1e-9) {
-        const dt = Math.min(nextDt(tl, { dtMin: 2e-3, dtMax: 5, frac: 0.02 }), c.rice.presoak.t - tl);
-        stepGrain(grain, dt, bath); tl += dt;
+  function grainRadiusFromCfg(cfg) {
+    if (cfg.R) return cfg.R;
+    return equivalentSize(cfg.grain || 'medium', cfg.geom === undefined ? 'sphere' : cfg.geom);
+  }
+
+  /* run a single grain: optional presoak, then main bath */
+  function runGrain(cfg) {
+    cfg = cfg || {};
+    var p = withParams(cfg.p);
+    var geom = cfg.geom === undefined ? 'sphere' : cfg.geom;
+    var R0 = grainRadiusFromCfg(cfg);
+    var mode = cfg.mode || 'cook';
+    var T0 = cfg.T0 === undefined ? 25 : cfg.T0;
+    var TC = cfg.TC === undefined ? 100 : cfg.TC;
+    var h = cfg.h === undefined ? p.h : cfg.h;
+    var Dfactor = cfg.Dfactor === undefined ? 1 : cfg.Dfactor;
+    var s = makeGrain({ p: p, geom: geom, R: R0, N: cfg.N || 60, level: cfg.level || 4, T0: T0, Dfactor: Dfactor });
+    var dtMin = cfg.dtMin || 2e-3, dtFrac = cfg.dtFrac || 0.02;
+    var soak = null;
+    /* presoak phase: bath at TC_soak, Xeq = X_nat; clock reset afterwards */
+    if (cfg.presoak && cfg.presoak.time > 0) {
+      var Ts = cfg.presoak.TC === undefined ? T0 : cfg.presoak.TC;
+      for (var i0 = 0; i0 < s.N; i0++) s.T[i0] = Ts;
+      s.energy0 = grainEnergy(s);
+      var tS = 0, tEnd = cfg.presoak.time, dtMaxS = cfg.presoak.dtMax || 5;
+      while (tS < tEnd - 1e-9) {
+        var dts = clamp(dtFrac * tS, dtMin, dtMaxS); if (tS + dts > tEnd) dts = tEnd - tS;
+        stepGrain(s, dts, { T: Ts, wet: true, Xeq: p.Xnat, h: h }); tS += dts;
       }
-      grain.ledger = { waterIn: 0, heatCond: 0, enthalpyIn: 0, gelHeat: 0 };
-      grain.W0 = waterMass(grain); grain.E0 = energy(grain); grain.t = 0;
+      soak = grainSummary(s); soak.time = tEnd; soak.TC = Ts;
+      soak.profile = grainProfile(s);
+      s.t = 0;
     }
-    const X0 = c.rice.grain.X0 != null ? c.rice.grain.X0 : p.X0;
-    Ng = (c.rice.massRaw / (1 + X0)) / grain.msTot;  // number of identical grains carrying the dry mass of the rice
+    var bath = { T: TC, wet: mode !== 'heat', Xeq: cfg.Xeq !== undefined ? cfg.Xeq : (mode === 'soak' ? p.Xnat : p.Xgel), h: h };
+    if (cfg.wet === false) bath.wet = false;
+    var dur = cfg.duration || 1500;
+    var dtMax = cfg.dtMax || Math.max(0.05, Math.min(mode === 'soak' ? 5 : 1, dur / 1500));
+    var times = outputTimes(dur, cfg.outputs);
+    var hist = {}, keys = ['t', 'R', 'RR0', 'Xm', 'Xc', 'Xs', 'Tc', 'Ts', 'Tm', 'Gc', 'Gm', 'Gs', 'water', 'waterIn',
+      'waterResidual', 'energy', 'heatCond', 'enthalpyIn', 'gelHeat', 'energyResidual', 'Vgeom', 'Vshell', 'Ws', 'Qs'];
+    keys.forEach(function (k) { hist[k] = []; });
+    var profiles = [], wantProf = cfg.profiles !== false;
+    var T00 = s.T[0], X00 = s.X[0];
+    function record() {
+      var su = grainSummary(s);
+      keys.forEach(function (k) { hist[k].push(su[k]); });
+      if (wantProf) profiles.push(grainProfile(s));
+    }
+    var ev = { tCentreWithin1K: null, tCentre99: null, tCoreGel: null, tXc50: null };
+    var Gdone = cfg.Gdone === undefined ? p.G_done : cfg.Gdone;
+    record();
+    var t = 0, k = 1, prev = { t: 0, Tc: s.T[0], Gc: s.G[0], Xc: s.X[0] };
+    var Xtarget50 = X00 + 0.5 * (bath.Xeq - X00);
+    var maxPe = 0;
+    while (k < times.length) {
+      var dt = clamp(dtFrac * t, dtMin, dtMax);
+      if (t + dt > times[k] - 1e-12) dt = times[k] - t;
+      stepGrain(s, dt, bath); t += dt;
+      var Tc = s.T[0], Gc = s.G[0], Xc = s.X[0];
+      if (ev.tCentreWithin1K === null && Math.abs(TC - Tc) <= 1 && Math.abs(TC - T00) > 1) {
+        var e0 = Math.abs(TC - prev.Tc), e1 = Math.abs(TC - Tc);
+        ev.tCentreWithin1K = prev.t + (e0 - 1) / (e0 - e1) * (t - prev.t);
+      }
+      if (ev.tCentre99 === null && Math.abs(TC - T00) > 1e-9) {
+        var th1 = (Tc - T00) / (TC - T00);
+        if (th1 >= 0.99) {
+          var th0 = (prev.Tc - T00) / (TC - T00);
+          ev.tCentre99 = prev.t + (0.99 - th0) / (th1 - th0) * (t - prev.t);
+        }
+      }
+      if (ev.tCoreGel === null && Gc >= Gdone) {
+        ev.tCoreGel = prev.t + (Gdone - prev.Gc) / (Gc - prev.Gc) * (t - prev.t);
+      }
+      if (ev.tXc50 === null && bath.wet && (Xc - X00) >= (Xtarget50 - X00) && Xtarget50 > X00) {
+        ev.tXc50 = prev.t + (Xtarget50 - prev.Xc) / (Xc - prev.Xc) * (t - prev.t);
+      }
+      prev = { t: t, Tc: Tc, Gc: Gc, Xc: Xc };
+      if (t >= times[k] - 1e-12) { t = times[k]; s.t = t; record(); k++; }
+      if (cfg.stopAtGel && ev.tCoreGel !== null && t > ev.tCoreGel * 1.02) break;
+    }
+    return {
+      cfg: cfg, p: p, geom: geomIndex(geom), R0: R0, bath: bath, hist: hist, profiles: profiles,
+      events: ev, soak: soak, final: grainSummary(s), state: s, T0: T00, X0: X00
+    };
   }
-  const gW = () => grain ? Ng * waterMass(grain) : 0;
-  const water0 = M + gW();
-  const Epot = () => (M * p.c_w + c.Cv) * Tp;
-  const Egr = () => grain ? Ng * energy(grain) : 0;
-  const E0 = Epot() + Egr();                         // grains count from t = 0 even if they wait beside the pot
-  const out = { t: [], Tp: [], M: [], Mgrain: [], Mevap: [], evapRate: [], power: [], loss: [], toGrains: [], waterToGrains: [],
-    Xmean: [], Gc: [], Xc: [], Tc: [], R: [], Vgrains: [], energyResidual: [], waterResidual: [], phase: [], profiles: [],
-    cumPin: [], cumLoss: [], cumLatent: [], cumToGrains: [], sensible: [],
-    Tb, pAbs, Ng, UA, km };
-  const Epot0 = (c.water * 4180 + c.Cv) * c.T0;
-  const nOut = c.nOut || 360, dtOut = c.tEnd / nOut;
-  const restTime = c.rice && c.rice.restTime ? c.rice.restTime : 0;
-  let rates = { evap: 0, P: 0, loss: 0, toGrains: 0, waterToGrains: 0 };
-  const record = () => {
-    const gs = grain ? grainSummary(grain) : null;
-    out.t.push(t); out.Tp.push(Tp); out.M.push(M); out.Mgrain.push(gs ? Ng * gs.water : 0); out.Mevap.push(Mevap);
-    out.evapRate.push(rates.evap); out.power.push(rates.P); out.loss.push(rates.loss); out.toGrains.push(rates.toGrains); out.waterToGrains.push(rates.waterToGrains);
-    out.Xmean.push(gs ? gs.Xmean : null); out.Gc.push(gs ? gs.Gc : null); out.Xc.push(gs ? gs.Xc : null); out.Tc.push(gs ? gs.Tc : null); out.R.push(gs ? gs.R : null);
-    out.Vgrains.push(gs ? Ng * gs.Vshell : 0);
-    out.energyResidual.push(Epot() + Egr() - E0 - (led.Pin - led.loss - led.latent - led.steamEnth));
-    out.waterResidual.push(M + gW() + Mevap - water0);
-    out.phase.push(dry ? (grain ? 'rest' : 'dry') : boiled ? 'boiling' : 'heating');
-    out.cumPin.push(led.Pin); out.cumLoss.push(led.loss); out.cumLatent.push(led.latent + led.steamEnth); out.cumToGrains.push(led.toGrains);
-    out.sensible.push(Epot() - Epot0);
-    if (grain && c.keepProfiles !== false) out.profiles.push(profile(grain));
+
+  /* interpolate the first crossing time of series y ≥ yc in a run history */
+  function crossingTime(t, y, yc) {
+    for (var i = 1; i < y.length; i++) {
+      if (y[i] >= yc && y[i - 1] < yc) return t[i - 1] + (yc - y[i - 1]) / (y[i] - y[i - 1]) * (t[i] - t[i - 1]);
+    }
+    return y.length && y[0] >= yc ? t[0] : null;
+  }
+  function interp(t, y, tt) {
+    if (tt <= t[0]) return y[0];
+    for (var i = 1; i < t.length; i++) if (t[i] >= tt) {
+      var f = (tt - t[i - 1]) / (t[i] - t[i - 1]); return y[i - 1] + f * (y[i] - y[i - 1]);
+    }
+    return y[y.length - 1];
+  }
+
+  /* ---------------------------------------------------------------------------
+     2.5 POT MODEL
+     --------------------------------------------------------------------------- */
+  var PLACES = {
+    sea:     { name: 'Sea level (0 m)',          z: 0,    gauge: 0 },
+    hyd:     { name: 'Hyderabad (540 m)',        z: 540,  gauge: 0 },
+    shimla:  { name: 'Shimla (2200 m)',          z: 2200, gauge: 0 },
+    alt3000: { name: '3000 m',                   z: 3000, gauge: 0 },
+    leh:     { name: 'Leh (3500 m)',             z: 3500, gauge: 0 },
+    cooker:  { name: 'Pressure cooker (1 bar gauge, sea level)', z: 0, gauge: 1e5 }
   };
-  record();
-  let nextOut = dtOut;
-  while (t < c.tEnd - 1e-9) {
-    let dt = c.dt;
-    if (grain && added) dt = Math.min(dt, nextDt(t - tAdded, { dtMin: 2e-3, dtMax: c.dt, frac: 0.02 }));
-    const draw = rates.evap + rates.waterToGrains;               // shrink the step as the free water runs out
-    if (!dry && draw > 0 && M < 2 * draw * dt) dt = Math.max(1e-3, 0.5 * M / draw);
-    dt = Math.min(dt, nextOut - t, c.tEnd - t);
-    const resting = dry;
-    const P = resting ? 0 : ((c.simmerAfterBoil && boiled && t >= tBoil + c.simmerDelay) ? c.Psim : c.Pboil);
-    const loss = UA * (Tp - c.Tamb);
-    let Qg = 0, mg = 0;
-    if (grain && added) {                            // the grains see the liquid at Tp (or steam while resting)
-      const bath = resting ? { T: Tp, wet: false, h: 100 } : { T: Tp, wet: true };
-      const l0 = Object.assign({}, grain.ledger);
-      stepGrain(grain, dt, bath);
-      Qg = Ng * (grain.ledger.heatCond - l0.heatCond) / dt;
-      mg = Ng * (grain.ledger.waterIn - l0.waterIn) / dt;
-      if (!resting) led.toGrains += Ng * (grain.ledger.heatCond - l0.heatCond + grain.ledger.enthalpyIn - l0.enthalpyIn);
-      else led.toGrains += Qg * dt;
-    }
-    /* sub-boiling evaporation through the free surface: ṁ = k_m A (ρ_v,sat(Tp) − ρ_v,room); k_m illustrative */
-    const mev = resting ? 0 : Math.max(0, km * c.area * (vapourDensity(Tp, 1) - vapourDensity(c.Tamb, c.RH)));
-    const Mnew0 = M - dt * (mg + mev);
-    const S = P - loss - Qg - mg * p.c_w * Tp - mev * (p.c_w * Tp + hfg(Tp));
-    const Ecand = Epot() + dt * S;
-    let Tn = Ecand / (Mnew0 * p.c_w + c.Cv), mb = 0;
-    if (!resting && Tn > Tb && Mnew0 > 1e-9) {
-      const L = hfg(Tb);
-      mb = (Ecand - (Mnew0 * p.c_w + c.Cv) * Tb) / (dt * (L + p.c_w * (Tp - Tb)));
-      if (mb * dt >= Mnew0) { mb = Mnew0 / dt; Tn = (Ecand - dt * mb * (p.c_w * Tp + L)) / c.Cv; }
-      else Tn = Tb;
-      if (!boiled) { boiled = true; tBoil = t + dt; }
-    }
-    led.Pin += P * dt; led.loss += loss * dt;
-    led.latent += (mev * hfg(Tp) + mb * hfg(Tb)) * dt;
-    led.steamEnth += (mev + mb) * p.c_w * Tp * dt;
-    led.waterToGrains += mg * dt;
-    Mevap += (mev + mb) * dt;
-    M = Mnew0 - dt * mb; Tp = Tn; t += dt;
-    scorchMax = Math.max(scorchMax, Tp);
-    rates = { evap: mev + mb, P, loss, toGrains: Qg, waterToGrains: mg };
-    if (!added && boiled) { added = true; tAdded = t; }
-    if (M <= 1e-6 && !dry) { dry = true; tDry = t; }
-    if (dry && !grain) { record(); break; }
-    if (dry && grain && t - tDry >= restTime - 1e-9) { record(); break; }
-    if (t >= nextOut - 1e-9) { record(); nextOut += dtOut; }
-  }
-  out.events = { tBoil, tDry, tAdded, tCoreGel: grain ? crossTime(out.t, out.Gc, p.G_done) : null };
-  out.ledger = led; out.final = { M, Mevap, Tp, t, scorchMax };
-  out.cfg = c;
-  return out;
-}
-/* Pot energy bookkeeping helper for simple (no rice) runs: returns the energy split in J. */
-function potEnergySplit(out) {
-  const c = out.cfg, p = defaults();
-  const i = out.t.length - 1;
-  const sensible = (out.M[i] * p.c_w + c.Cv) * out.Tp[i] - (out.M[0] * p.c_w + c.Cv) * out.Tp[0];
-  return { Pin: out.ledger.Pin, sensible, latent: out.ledger.latent, steamEnthalpy: out.ledger.steamEnth, losses: out.ledger.loss, toGrains: out.ledger.toGrains };
-}
+  function placePressure(key) { var P = PLACES[key] || PLACES.sea; return pressureAtAltitude(P.z) + P.gauge; }
+  function placeBoilingPoint(key) { return boilingPoint(placePressure(key)); }
 
-/* ---------------------------------------------------------------------
-   6. ANALYTICAL REFERENCE SOLUTIONS (Crank, The Mathematics of Diffusion; Carslaw & Jaeger)
-   --------------------------------------------------------------------- */
-const J0_ZEROS = [2.404825557695773, 5.520078110286311, 8.653727912911013, 11.79153443901428, 14.93091770848779,
-  18.07106396791092, 21.21163662987926, 24.35247153074930, 27.49347913204025, 30.63460646843198];
-function j0zero(n) {                                              // n = 1, 2, ...  (McMahon expansion beyond the table)
-  if (n <= J0_ZEROS.length) return J0_ZEROS[n - 1];
-  const b = (n - 0.25) * Math.PI;
-  return b + 1 / (8 * b) - 124 / (3 * Math.pow(8 * b, 3));
-}
-/* Fractional uptake M_t/M_inf for constant surface concentration and constant D (Fo = D t / R²). */
-function uptakeFraction(geom, Fo, nTerms) {
-  nTerms = nTerms || 400;
-  if (Fo <= 0) return 0;
-  let s = 0;
-  if (geom === 'sphere') { for (let n = 1; n <= nTerms; n++) s += Math.exp(-n * n * Math.PI * Math.PI * Fo) / (n * n); return 1 - 6 / (Math.PI * Math.PI) * s; }
-  if (geom === 'slab') { for (let n = 0; n < nTerms; n++) { const q = (2 * n + 1) * Math.PI / 2; s += Math.exp(-q * q * Fo) / (q * q); } return 1 - 2 * s; }
-  for (let n = 1; n <= nTerms; n++) { const b = j0zero(n); s += Math.exp(-b * b * Fo) / (b * b); } return 1 - 4 * s;
-}
-/* Fraction of the surface step reached at radius r/R (sphere and slab). */
-function uptakeProfile(geom, rStar, Fo, nTerms) {
-  nTerms = nTerms || 400; let s = 0;
-  if (geom === 'sphere') {
-    if (rStar < 1e-9) { for (let n = 1; n <= nTerms; n++) s += Math.pow(-1, n) * Math.exp(-n * n * Math.PI * Math.PI * Fo); return 1 + 2 * s; }
-    for (let n = 1; n <= nTerms; n++) s += Math.pow(-1, n) / n * Math.sin(n * Math.PI * rStar) * Math.exp(-n * n * Math.PI * Math.PI * Fo);
-    return 1 + 2 / (Math.PI * rStar) * s;
-  }
-  if (geom === 'slab') {
-    for (let n = 0; n < nTerms; n++) { const q = (2 * n + 1) * Math.PI / 2; s += Math.pow(-1, n) / (2 * n + 1) * Math.cos(q * rStar) * Math.exp(-q * q * Fo); }
-    return 1 - 4 / Math.PI * s;
-  }
-  return null;
-}
-/* Sphere with convective surface: eigenvalues of λ cos λ + (Bi − 1) sin λ = 0 (i.e. 1 − λ cot λ = Bi). */
-function sphereEigen(Bi, n) {
-  const roots = [];
-  for (let k = 1; k <= n; k++) {
-    let a = (k - 1) * Math.PI + 1e-9, b = k * Math.PI - 1e-9;
-    const f = x => x * Math.cos(x) + (Bi - 1) * Math.sin(x);
-    let fa = f(a);
-    for (let it = 0; it < 200; it++) { const mid = (a + b) / 2, fm = f(mid); if (fa * fm <= 0) b = mid; else { a = mid; fa = fm; } }
-    roots.push((a + b) / 2);
-  }
-  return roots;
-}
-/* θ = (T − T_bath)/(T0 − T_bath) at r/R for Fo = α t / R². */
-function sphereConvective(Bi, rStar, Fo, nTerms) {
-  nTerms = nTerms || 120;
-  const lam = sphereEigen(Bi, nTerms); let s = 0;
-  for (const l of lam) {
-    const Cn = 4 * (Math.sin(l) - l * Math.cos(l)) / (2 * l - Math.sin(2 * l));
-    const sh = rStar < 1e-9 ? 1 : Math.sin(l * rStar) / (l * rStar);
-    s += Cn * Math.exp(-l * l * Fo) * sh;
-  }
-  return s;
-}
-/* Short-time uptake for a sphere: M_t/M_inf ≈ 6 √(Fo/π) − 3 Fo. */
-function sphereShortTime(Fo) { return 6 * Math.sqrt(Fo / Math.PI) - 3 * Fo; }
+  function runPot(cfg) {
+    cfg = cfg || {};
+    var p = withParams(cfg.p);
+    var c = {
+      water: 1.0, Cv: p.C_v, area: Math.PI * p.potR * p.potR, Tamb: 25, RH: p.RH, Pboil: 1500, Psim: 400,
+      simmerAfterBoil: false, lid: true, altitude: 0, cookerGauge: 0, dt: 0.5, duration: 1200,
+      recordEvery: 5, rice: null, T0: undefined
+    };
+    for (var key in cfg) if (cfg[key] !== undefined && key !== 'p') c[key] = cfg[key];
+    if (c.place) { var PL = PLACES[c.place] || PLACES.sea; c.altitude = PL.z; c.cookerGauge = PL.gauge; }
+    var sealed = c.cookerGauge > 0;
+    var UA = c.UA !== undefined ? c.UA : ((c.lid || sealed) ? p.UA_lid : p.UA_open);
+    var km = c.km !== undefined ? c.km : (sealed ? 0 : (c.lid ? p.km_lid : p.km_open));
+    var pres = pressureAtAltitude(c.altitude) + c.cookerGauge;
+    var Tb = boilingPoint(pres), cw = p.c_w;
+    var T0 = c.T0 === undefined ? c.Tamb : c.T0;
+    var st = { t: 0, M: c.water, T: T0, E: (c.water * cw + c.Cv) * T0, steam: 0, Pin: 0, loss: 0, latent: 0,
+      toGrains: 0, phase: 'heating', boiled: false, tBoil: null, tDry: null, tRestEnd: null, mb: 0, mev: 0, mg: 0, P: c.Pboil };
+    var E0 = st.E, M0 = c.water;
+    var rice = c.rice, g = null, N = 0, tAdd = null, grainW0 = 0, riceInfo = null;
+    function addRice() {
+      var gp = withParams(cfg.p);
+      var R0 = rice.R || equivalentSize(rice.grain || 'medium', rice.geom || 'sphere');
+      g = makeGrain({ p: gp, geom: rice.geom || 'sphere', R: R0, N: rice.N || 60, level: rice.level || 4,
+        T0: rice.presoak ? (rice.soakTC === undefined ? c.Tamb : rice.soakTC) : c.Tamb, Dfactor: rice.Dfactor });
+      var soakInfo = null;
+      if (rice.presoak > 0) {
+        var Ts = rice.soakTC === undefined ? c.Tamb : rice.soakTC, ts = 0;
+        while (ts < rice.presoak - 1e-9) {
+          var d = clamp(0.02 * ts, 2e-3, 5); if (ts + d > rice.presoak) d = rice.presoak - ts;
+          stepGrain(g, d, { T: Ts, wet: true, Xeq: gp.Xnat, h: gp.h }); ts += d;
+        }
+        soakInfo = grainSummary(g);
+        for (var i = 0; i < g.N; i++) g.T[i] = c.Tamb;   // drained grains back at kitchen temperature
+        g.waterIn = 0; g.heatCond = 0; g.enthalpyIn = 0; g.gelHeat = 0;
+        g.water0 = grainWater(g); g.energy0 = grainEnergy(g);
+      }
+      var dry = rice.massRaw / (1 + gp.X0);
+      N = dry / g.msTotal;
+      grainW0 = grainWater(g);
+      tAdd = st.t;
+      riceInfo = { N: N, dryMass: dry, R0: R0, grainDryMass: g.msTotal, soak: soakInfo, grainW0: N * grainW0 };
+    }
+    if (rice && (rice.addAt || 'start') === 'start') addRice();
+    var keys = ['t', 'T', 'M', 'grainWater', 'absorbed', 'steam', 'mev', 'mb', 'mg', 'Xm', 'Gc', 'Xc', 'Tc', 'R', 'RR0',
+      'Vgrains', 'Pin', 'loss', 'latent', 'toGrains', 'sensible', 'energyResidual', 'waterResidual', 'P', 'phase', 'boiling'];
+    var hist = {}; keys.forEach(function (k) { hist[k] = []; });
+    var profiles = [];
+    var gEv = { tCoreGel: null };
+    function waterAbsorbed() { return g ? N * (grainWater(g) - grainW0) : 0; }
+    function record() {
+      var su = g ? grainSummary(g) : null;
+      var abs = waterAbsorbed();
+      var sensible = st.E - E0;
+      var eres = (sensible + st.toGrains + st.latent + st.loss - st.Pin) / Math.max(st.Pin, 1);
+      var wres = (st.M + abs + st.steam - M0) / M0;
+      var row = {
+        t: st.t, T: st.T, M: st.M, grainWater: g ? N * grainWater(g) : 0, absorbed: abs, steam: st.steam,
+        mev: st.mev, mb: st.mb, mg: st.mg, Xm: su ? su.Xm : null, Gc: su ? su.Gc : null, Xc: su ? su.Xc : null,
+        Tc: su ? su.Tc : null, R: su ? su.R : null, RR0: su ? su.RR0 : null, Vgrains: su ? N * su.Vgeom : 0,
+        Pin: st.Pin, loss: st.loss, latent: st.latent, toGrains: st.toGrains, sensible: sensible,
+        energyResidual: eres, waterResidual: wres, P: st.P, phase: st.phase, boiling: st.mb > 0 ? 1 : 0
+      };
+      keys.forEach(function (k) { hist[k].push(row[k]); });
+      profiles.push(g ? grainProfile(g) : null);
+    }
+    record();
+    var nextRec = c.recordEvery, dur = c.duration, guard = 0;
+    var dryThreshold = 1e-6;
+    while (st.t < dur - 1e-9 && guard++ < 2e6) {
+      var resting = st.phase === 'rest';
+      var dt = c.dt;
+      if (g && tAdd !== null) dt = Math.min(dt, Math.max(0.01, 0.02 * (st.t - tAdd)));
+      var rate = st.mg + st.mev + st.mb;
+      if (st.M > 0 && rate > 0 && 5 * dt * rate > st.M) dt = Math.max(1e-4, st.M / (5 * rate));
+      if (st.t + dt > nextRec) dt = Math.max(nextRec - st.t, 1e-9);
+      if (st.t + dt > dur) dt = dur - st.t;
+      var ok = false, tries = 0, gNew = null, res;
+      while (!ok && tries < 40) {
+        res = potStep(dt);
+        if (res) ok = true; else { dt *= 0.5; tries++; }
+      }
+      if (!ok) break;
+      // commit
+      st.t += dt;
+      if (rice && !g && (rice.addAt === 'boil') && st.boiled) addRice();
+      if (g && gEv.tCoreGel === null && g.G[0] >= (rice.Gdone || p.G_done)) gEv.tCoreGel = st.t;
+      if (rice && g && st.M <= dryThreshold && st.tDry === null && !resting) {
+        st.tDry = st.t; st.phase = 'rest'; st.tRestEnd = st.t + (rice.restTime === undefined ? 600 : rice.restTime);
+      }
+      if (!rice && st.M <= dryThreshold && st.phase !== 'dry') { st.phase = 'dry'; st.tDry = st.t; }
+      if (st.t >= nextRec - 1e-9) { record(); nextRec += c.recordEvery; }
+      if (st.phase === 'rest' && st.t >= st.tRestEnd - 1e-9) { if (hist.t[hist.t.length - 1] < st.t) record(); break; }
+    }
+    if (hist.t[hist.t.length - 1] < st.t - 1e-9) record();
 
-/* ---------------------------------------------------------------------
-   7. UTILITIES
-   --------------------------------------------------------------------- */
-/* Kitchen soaking data: convert drained masses to dry-basis moisture. */
-function moistureFromMass(m, m0, X0) { return (m / m0) * (1 + X0) - 1; }
-/* Fit D (and optionally X_eq) to mean-moisture data using the constant-D, fixed-size sphere series. */
-function fitSoaking(data, R, X0, XeqFixed) {
-  const pts = data.filter(d => isFinite(d.t) && isFinite(d.X) && d.t > 0);
-  if (pts.length < 2) return null;
-  const sse = (D, Xeq) => pts.reduce((a, d) => { const f = uptakeFraction('sphere', D * d.t / (R * R), 200); const r = X0 + (Xeq - X0) * f - d.X; return a + r * r; }, 0);
-  const bestD = (Xeq) => {
-    let lo = Math.log(1e-13), hi = Math.log(1e-8);
-    const gr = (Math.sqrt(5) - 1) / 2;
-    let c1 = hi - gr * (hi - lo), c2 = lo + gr * (hi - lo), f1 = sse(Math.exp(c1), Xeq), f2 = sse(Math.exp(c2), Xeq);
-    for (let i = 0; i < 80; i++) { if (f1 < f2) { hi = c2; c2 = c1; f2 = f1; c1 = hi - gr * (hi - lo); f1 = sse(Math.exp(c1), Xeq); } else { lo = c1; c1 = c2; f1 = f2; c2 = lo + gr * (hi - lo); f2 = sse(Math.exp(c2), Xeq); } }
-    const D = Math.exp((lo + hi) / 2); return { D, Xeq, sse: sse(D, Xeq) };
+    function potStep(dt) {
+      var resting = st.phase === 'rest' || st.phase === 'dry';
+      var Tp = st.T;
+      var P = resting ? 0 : ((st.boiled && c.simmerAfterBoil) ? c.Psim : c.Pboil);
+      var loss = UA * (Tp - c.Tamb);
+      var mev = 0;
+      if (st.M > 0 && km > 0) mev = Math.max(0, km * c.area * (vapourDensity(Tp, 1) - c.RH * vapourDensity(c.Tamb, 1)));
+      var mg = 0, Qg = 0, gn = null;
+      if (g) {
+        gn = cloneGrain(g);
+        var wet = st.M > dryThreshold && !resting;
+        stepGrain(gn, dt, { T: Tp, wet: wet, Xeq: gn.p.Xgel, h: resting ? p.h_rest : (rice.h || gn.p.h) });
+        mg = N * (gn.waterIn - g.waterIn) / dt;
+        Qg = N * ((gn.heatCond + gn.enthalpyIn) - (g.heatCond + g.enthalpyIn)) / dt;
+      }
+      var hf = hfg(Tp);
+      var S = P - loss - Qg - mev * (cw * Tp + hf);
+      var Mn = st.M - dt * (mg + mev);
+      if (Mn < -1e-12) return false;
+      if (Mn < 0) Mn = 0;
+      var Ec = st.E + dt * S, mb = 0, En, Tn;
+      var Tc = Ec / (Mn * cw + c.Cv);
+      if (Tc > Tb && Mn > 0) {
+        var hb = hfg(Tb);
+        mb = (Ec - (Mn * cw + c.Cv) * Tb) / (dt * hb);
+        if (dt * mb >= Mn) {
+          mb = Mn / dt; En = Ec - Mn * (cw * Tb + hb); Mn = 0; Tn = En / c.Cv;
+        } else {
+          Mn = Mn - dt * mb; En = Ec - dt * mb * (cw * Tb + hb); Tn = En / (Mn * cw + c.Cv);
+        }
+        st.latent += dt * mb * (cw * Tb + hb);
+      } else { En = Ec; Tn = Tc; }
+      // commit
+      if (gn) { for (var kk in gn) g[kk] = gn[kk]; }
+      st.latent += dt * mev * (cw * Tp + hf);
+      st.steam += dt * (mev + mb);
+      st.Pin += dt * P; st.loss += dt * loss; st.toGrains += dt * Qg;
+      st.M = Mn; st.E = En; st.T = Tn; st.mb = mb; st.mev = mev; st.mg = mg; st.P = P;
+      if (!st.boiled && mb > 0) { st.boiled = true; st.tBoil = st.t + dt; }
+      if (st.phase === 'heating' && st.boiled) st.phase = 'boiling';
+      return true;
+    }
+    return {
+      cfg: c, p: p, Tb: Tb, pressure: pres, UA: UA, km: km, hist: hist, profiles: profiles, rice: riceInfo,
+      tBoil: st.tBoil, tDry: st.tDry, tCoreGel: gEv.tCoreGel, final: st, grain: g, M0: M0, E0: E0
+    };
+  }
+
+  /* ---------------------------------------------------------------------------
+     2.6 ANALYTICAL REFERENCES (Crank 1975; Carslaw & Jaeger 1959)
+     --------------------------------------------------------------------------- */
+  var J0Z = [2.404825557695773, 5.520078110286311, 8.653727912911013, 11.79153443901428, 14.93091770848779,
+    18.07106396791092, 21.21163662987926, 24.35247153074930, 27.49347913204025, 30.63460646843198,
+    33.77582021357357, 36.91709835366404, 40.05842576462824, 43.19979171317673, 46.34118837166181,
+    49.48260989739782, 52.62405184111500, 55.76551075501998, 58.90698392608094, 62.04846919022717];
+  function j0zero(n) {   // n = 1, 2, ...
+    if (n <= J0Z.length) return J0Z[n - 1];
+    var b = (n - 0.25) * Math.PI, e = 8 * b;
+    return b + 1 / e - 124 / (3 * e * e * e) + 120928 / (15 * Math.pow(e, 5));   // McMahon
+  }
+  function besselJ(n, x) {   // (1/2π)∫cos(nτ − x sin τ)dτ, trapezoid (exponentially convergent)
+    var M = Math.max(64, Math.ceil(Math.abs(x)) + 48), s = 0;
+    for (var k = 0; k < M; k++) { var tau = 2 * Math.PI * k / M; s += Math.cos(n * tau - x * Math.sin(tau)); }
+    return s / M;
+  }
+  function nTerms(Fo) { return Math.min(4000, Math.ceil(Math.sqrt(46 / (Math.PI * Math.PI * Math.max(Fo, 1e-9)))) + 8); }
+  function sphereShortTime(Fo) { return 6 * Math.sqrt(Fo / Math.PI) - 3 * Fo; }
+  function uptakeFraction(geom, Fo) {
+    var m = geomIndex(geom), s = 0, n;
+    if (Fo <= 0) return 0;
+    if (m === 2) {
+      if (Fo < 0.05) return sphereShortTime(Fo);
+      for (n = 1; n <= 60; n++) s += Math.exp(-n * n * Math.PI * Math.PI * Fo) / (n * n);
+      return 1 - 6 / (Math.PI * Math.PI) * s;
+    }
+    if (m === 0) {
+      if (Fo < 0.05) return 2 * Math.sqrt(Fo / Math.PI);
+      for (n = 0; n <= 60; n++) { var q = (2 * n + 1) * Math.PI; s += 8 / (q * q) * Math.exp(-q * q * Fo / 4); }
+      return 1 - s;
+    }
+    if (Fo < 1e-3) return 4 * Math.sqrt(Fo / Math.PI) - Fo - Math.pow(Fo, 1.5) / (3 * Math.sqrt(Math.PI));
+    var NN = Math.max(60, nTerms(Fo));
+    for (n = 1; n <= NN; n++) { var bb = j0zero(n); s += 4 / (bb * bb) * Math.exp(-bb * bb * Fo); }
+    return 1 - s;
+  }
+  /* fractional approach to the surface value at r* = r/R */
+  function uptakeProfile(geom, rs, Fo) {
+    var m = geomIndex(geom), s = 0, n, NN = nTerms(Fo);
+    if (Fo <= 0) return rs >= 1 ? 1 : 0;
+    if (m === 2) {
+      if (rs < 1e-9) { for (n = 1; n <= NN; n++) s += Math.pow(-1, n) * Math.exp(-n * n * Math.PI * Math.PI * Fo); return 1 + 2 * s; }
+      for (n = 1; n <= NN; n++) s += Math.pow(-1, n) / n * Math.sin(n * Math.PI * rs) * Math.exp(-n * n * Math.PI * Math.PI * Fo);
+      return 1 + 2 / (Math.PI * rs) * s;
+    }
+    if (m === 0) {
+      for (n = 0; n <= NN; n++) {
+        var q = (2 * n + 1) * Math.PI / 2;
+        s += Math.pow(-1, n) / (2 * n + 1) * Math.exp(-q * q * Fo) * Math.cos(q * rs);
+      }
+      return 1 - 4 / Math.PI * s;
+    }
+    for (n = 1; n <= Math.min(NN, 400); n++) {
+      var b = j0zero(n);
+      s += besselJ(0, b * rs) / (b * besselJ(1, b)) * Math.exp(-b * b * Fo);
+    }
+    return 1 - 2 * s;
+  }
+  var eigenCache = {};
+  function sphereEigen(Bi, n) {
+    var key = Bi + ':' + n;
+    if (eigenCache[key]) return eigenCache[key];
+    var f = function (l) { return l * Math.cos(l) + (Bi - 1) * Math.sin(l); };
+    var lo = (n - 1) * Math.PI + 1e-9, hi = n * Math.PI - 1e-12;
+    if (n === 1) lo = 1e-9;
+    var flo = f(lo);
+    for (var it = 0; it < 200; it++) {
+      var mid = 0.5 * (lo + hi), fm = f(mid);
+      if ((fm > 0) === (flo > 0)) { lo = mid; flo = fm; } else hi = mid;
+    }
+    return (eigenCache[key] = 0.5 * (lo + hi));
+  }
+  /* θ = (T − T∞)/(T0 − T∞) for a sphere with convective surface */
+  function sphereConvective(Bi, Fo, rs) {
+    var NN = Math.max(40, nTerms(Fo)), s = 0;
+    for (var n = 1; n <= NN; n++) {
+      var l = sphereEigen(Bi, n);
+      var C = 4 * (Math.sin(l) - l * Math.cos(l)) / (2 * l - Math.sin(2 * l));
+      var sh = rs < 1e-9 ? 1 : Math.sin(l * rs) / (l * rs);
+      s += C * Math.exp(-l * l * Fo) * sh;
+    }
+    return s;
+  }
+
+  /* ---------------------------------------------------------------------------
+     2.7 UTILITIES
+     --------------------------------------------------------------------------- */
+  function moistureFromMass(mm, m0, X0) { return (mm / m0) * (1 + X0) - 1; }
+  function golden(f, a, b, tol) {
+    var gr = (Math.sqrt(5) - 1) / 2, c = b - gr * (b - a), d = a + gr * (b - a), fc = f(c), fd = f(d);
+    for (var i = 0; i < 200 && Math.abs(b - a) > tol; i++) {
+      if (fc < fd) { b = d; d = c; fd = fc; c = b - gr * (b - a); fc = f(c); }
+      else { a = c; c = d; fc = fd; d = a + gr * (b - a); fd = f(d); }
+    }
+    return 0.5 * (a + b);
+  }
+  /* data: [{t (s), X}] — fits D (and plateau X∞) with the sphere series */
+  function fitSoaking(data, R, X0, geom, fixPlateau) {
+    geom = geom || 'sphere';
+    var pts = data.filter(function (d) { return d.t > 0 && isFinite(d.X); });
+    if (pts.length < 2) return null;
+    function plateauFor(D) {
+      if (fixPlateau !== undefined) return fixPlateau;
+      var num = 0, den = 0;
+      pts.forEach(function (d) { var F = uptakeFraction(geom, D * d.t / (R * R)); num += F * (d.X - X0); den += F * F; });
+      return X0 + (den > 0 ? num / den : 0);
+    }
+    function sse(lgD) {
+      var D = Math.pow(10, lgD), Xp = plateauFor(D), e = 0;
+      pts.forEach(function (d) { var r = X0 + (Xp - X0) * uptakeFraction(geom, D * d.t / (R * R)) - d.X; e += r * r; });
+      return e;
+    }
+    var lg = golden(sse, -14, -8, 1e-6), D = Math.pow(10, lg);
+    return { D: D, Xinf: plateauFor(D), rms: Math.sqrt(sse(lg) / pts.length), n: pts.length };
+  }
+
+  /* ---------------------------------------------------------------------------
+     2.8 SCENARIOS (science file §7)
+     --------------------------------------------------------------------------- */
+  var SCENARIOS = [
+    { id: 'base',    name: 'Base: medium, unsoaked, sea level', grain: 'medium', geom: 'sphere', place: 'sea', presoak: 0, brown: false },
+    { id: 'soak30',  name: 'Presoak 30 min',                    grain: 'medium', geom: 'sphere', place: 'sea', presoak: 1800, brown: false },
+    { id: 'soak120', name: 'Presoak 2 h',                       grain: 'medium', geom: 'sphere', place: 'sea', presoak: 7200, brown: false },
+    { id: 'long',    name: 'Long slender grain',                grain: 'long',   geom: 'sphere', place: 'sea', presoak: 0, brown: false },
+    { id: 'short',   name: 'Short bold grain',                  grain: 'short',  geom: 'sphere', place: 'sea', presoak: 0, brown: false },
+    { id: 'alt3000', name: '3000 m altitude',                   grain: 'medium', geom: 'sphere', place: 'alt3000', presoak: 0, brown: false },
+    { id: 'cooker',  name: 'Pressure cooker',                   grain: 'medium', geom: 'sphere', place: 'cooker', presoak: 0, brown: false },
+    { id: 'brown',   name: 'Brown rice (D × 0.58)',             grain: 'medium', geom: 'sphere', place: 'sea', presoak: 0, brown: true },
+    { id: 'cyl',     name: 'Same grain as cylinder (R = 2V/S)', grain: 'medium', geom: 'cylinder', place: 'sea', presoak: 0, brown: false }
+  ];
+  function runScenario(sc, opts) {
+    opts = opts || {};
+    var p = withParams(opts.p);
+    var Tb = placeBoilingPoint(sc.place);
+    var Df = sc.brown ? p.brownFactor : 1;
+    var R = equivalentSize(sc.grain, sc.geom);
+    var run = runGrain({
+      grain: sc.grain, geom: sc.geom, level: opts.level || 4, TC: Tb, T0: 25, mode: 'cook', Dfactor: Df,
+      presoak: sc.presoak ? { time: sc.presoak, TC: 25 } : null, duration: opts.duration || 2400,
+      outputs: { n: opts.n || 240 }, p: opts.p, profiles: opts.profiles === true, N: opts.N, dtMax: opts.dtMax
+    });
+    var alpha = grainAlpha(p.X0, p);
+    return {
+      sc: sc, Tb: Tb, R: R, run: run, tCoreGel: run.events.tCoreGel, tHeat: run.events.tCentreWithin1K,
+      tHeat99: run.events.tCentre99, naiveHeat: R * R / alpha, naiveWater: R * R / DgelAt(Tb, p, Df), alpha: alpha
+    };
+  }
+
+  var API = {
+    PARAMS: PARAMS, defaults: defaults, withParams: withParams, clamp: clamp, smoothstep: smoothstep,
+    psat: psat, boilingPoint: boilingPoint, boilingPointCC: boilingPointCC, hfg: hfg, pressureAtAltitude: pressureAtAltitude,
+    vapourDensity: vapourDensity, waterRho: waterRho, waterMu: waterMu, waterK: waterK, hSphereNatural: hSphereNatural,
+    GEOM: GEOM, GEOM_NAMES: GEOM_NAMES, GM: GM, geomIndex: geomIndex, volTo: volTo, areaAt: areaAt, radiusOfVol: radiusOfVol,
+    ellipsoid: ellipsoid, equivalentSize: equivalentSize, GRAIN_PRESETS: GRAIN_PRESETS,
+    LEVELS: LEVELS, levelFlags: levelFlags, specVol: specVol, arrhenius: arrhenius, diffusivity: diffusivity,
+    gelRate: gelRate, cellK: cellK, grainAlpha: grainAlpha, DgelAt: DgelAt,
+    makeGrain: makeGrain, cloneGrain: cloneGrain, stepGrain: stepGrain, grainSummary: grainSummary, grainProfile: grainProfile,
+    grainWater: grainWater, grainEnergy: grainEnergy, frontRadius: frontRadius, runGrain: runGrain, outputTimes: outputTimes,
+    crossingTime: crossingTime, interp: interp,
+    PLACES: PLACES, placePressure: placePressure, placeBoilingPoint: placeBoilingPoint, runPot: runPot,
+    j0zero: j0zero, besselJ: besselJ, uptakeFraction: uptakeFraction, uptakeProfile: uptakeProfile,
+    sphereEigen: sphereEigen, sphereConvective: sphereConvective, sphereShortTime: sphereShortTime,
+    moistureFromMass: moistureFromMass, fitSoaking: fitSoaking, golden: golden,
+    SCENARIOS: SCENARIOS, runScenario: runScenario
   };
-  if (XeqFixed != null) return Object.assign(bestD(XeqFixed), { n: pts.length });
-  let best = null;
-  const Xmax = Math.max(...pts.map(d => d.X));
-  for (let Xeq = Math.max(X0 + 0.02, Xmax); Xeq <= Math.max(Xmax * 1.6, X0 + 0.5); Xeq += 0.005) {
-    const r = bestD(Xeq); if (!best || r.sse < best.sse) best = r;
-  }
-  return Object.assign(best, { n: pts.length, rms: Math.sqrt(best.sse / pts.length) });
-}
-
-/* ---------------------------------------------------------------------
-   8. SCENARIO MATRIX (stage 7 and Results/scenario_times.csv)
-   --------------------------------------------------------------------- */
-const SCENARIOS = [
-  { id: 'base',    name: 'Medium grain · unsoaked · 100 °C (sea level)', preset: 'medium', geom: 'sphere', presoak: 0,   place: 'sea' },
-  { id: 'soak30',  name: 'Presoaked 30 min at 25 °C',                     preset: 'medium', geom: 'sphere', presoak: 30,  place: 'sea' },
-  { id: 'soak120', name: 'Presoaked 2 h at 25 °C',                        preset: 'medium', geom: 'sphere', presoak: 120, place: 'sea' },
-  { id: 'long',    name: 'Long slender grain',                            preset: 'long',   geom: 'sphere', presoak: 0,   place: 'sea' },
-  { id: 'short',   name: 'Short bold grain',                              preset: 'short',  geom: 'sphere', presoak: 0,   place: 'sea' },
-  { id: 'alt',     name: 'Open pot at 3000 m (water boils ≈ 90 °C)',      preset: 'medium', geom: 'sphere', presoak: 0,   place: 'alt3000' },
-  { id: 'cooker',  name: 'Pressure cooker, 1 bar gauge (≈ 120 °C)',       preset: 'medium', geom: 'sphere', presoak: 0,   place: 'cooker' },
-  { id: 'brown',   name: 'Brown rice (bran layer, lower D)',              preset: 'medium', geom: 'sphere', presoak: 0,   place: 'sea', brown: true },
-  { id: 'cyl',     name: 'Shape check: same grain as a long cylinder',    preset: 'medium', geom: 'cylinder', presoak: 0, place: 'sea' }
-];
-const PLACES = {
-  sea:     { name: 'Sea level',            altitude: 0,    gauge: 0 },
-  hyd:     { name: 'Hyderabad (≈540 m)',   altitude: 540,  gauge: 0 },
-  shimla:  { name: 'Shimla (≈2200 m)',     altitude: 2200, gauge: 0 },
-  alt3000: { name: '3000 m',               altitude: 3000, gauge: 0 },
-  leh:     { name: 'Leh (≈3500 m)',        altitude: 3500, gauge: 0 },
-  cooker:  { name: 'Pressure cooker (1 bar gauge)', altitude: 0, gauge: 1.0e5 }
-};
-function placeBoilingPoint(key) { const pl = PLACES[key]; return boilingPoint(pressureAtAltitude(pl.altitude) + pl.gauge); }
-function grainAlpha(X, p) { p = p || defaults(); const rho = (1 + X) / specVol(X, p), c = (p.c_s + X * p.c_w) / (1 + X); return cellK(X, p) / (rho * c); }
-function runScenario(sc, opt) {
-  opt = opt || {};
-  const p = defaults();
-  const R = equivalentSize(GRAIN_PRESETS[sc.preset], sc.geom);
-  const TC = placeBoilingPoint(sc.place);
-  const params = Object.assign({}, sc.brown ? { Dfactor: p.brownFactor } : {}, opt.params || {});
-  const r = runGrain({ grain: { geom: sc.geom, R0: R, N: opt.N || 50, level: opt.level || 4, T0: 25, params },
-    presoak: sc.presoak ? { TC: 25, t: sc.presoak * 60 } : null, bath: { TC }, tEnd: opt.tEnd || 3600, nOut: 360, dtMax: opt.dtMax || 1, keepProfiles: false });
-  const pp = Object.assign(defaults(), params);
-  const alpha = grainAlpha(p.X0, pp), Dw = diffusivity(TC, pp, LEVELS[4], 1, pp.Xgel);
-  return { sc, R, TC, tCoreGel: r.events.tCoreGel, tHeat: r.events.tCentreWithin1K,
-    naiveHeat: R * R / alpha, naiveWater: R * R / Dw, alpha, D: Dw, Xfinal: r.final.Xmean, run: r };
-}
-
-const api = {
-  PARAMS, defaults, GRAIN_PRESETS, LEVELS, GEOM, K0,
-  psat, boilingPoint, boilingPointCC, hfg, pressureAtAltitude, vapourDensity, waterRho, waterMu, waterK, hSphereNatural,
-  volTo, areaAt, ellipsoid, equivalentSize, specVol, diffusivity, gelRate, cellK,
-  createGrain, stepGrain, grainSummary, profile, runGrain, crossTime, waterMass, energy, grainVolumeFromShells,
-  runPot, potDefaults, potEnergySplit,
-  uptakeFraction, uptakeProfile, sphereEigen, sphereConvective, sphereShortTime, j0zero,
-  moistureFromMass, fitSoaking,
-  SCENARIOS, PLACES, placeBoilingPoint, grainAlpha, runScenario
-};
-if (typeof module !== 'undefined' && module.exports) module.exports = api;
-root.RicePhysics = api;
-})(typeof window !== 'undefined' ? window : globalThis);
+  if (typeof module !== 'undefined' && module.exports) module.exports = API;
+  root.RicePhysics = API;
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

@@ -1,0 +1,55 @@
+quantity,value,unit,note
+"Boiling point: Sea level, lid on",99.99682982482221,°C,
+"Time to boil: Sea level, lid on",260.5,s,
+"Boiled off in 20 min: Sea level, lid on",0.5158910098535354,kg,
+"Boiling point: Sea level, lid off",99.99682982482221,°C,
+"Time to boil: Sea level, lid off",292.5,s,
+"Boiled off in 20 min: Sea level, lid off",0.4284823581772415,kg,
+"Boiling point: 3000 m, lid on",90.02950700400976,°C,
+"Time to boil: 3000 m, lid on",222.5,s,
+"Boiled off in 20 min: 3000 m, lid on",0.544116772323253,kg,
+Boiling point: Pressure cooker,120.5359045360297,°C,
+Time to boil: Pressure cooker,340.5,s,
+Boiled off in 20 min: Pressure cooker,0.45756430524177627,kg,
+Equivalent sphere radius (medium),0.0011630761531716345,m,
+Biot number,5.614317069166268,-,
+Thermal diffusivity alpha(X0),1.1471108670449692e-7,m2/s,
+R^2/alpha,11.792636413263939,s,
+Centre within 1 K (heat only),8.43753620479686,s,
+Centre 99 % (heat only),8.931576890276544,s,
+Soak 25 C: mean X at 30 min,0.2686910431279291,kg/kg db,
+Soak 25 C: mean X at 2 h,0.3540831517903287,kg/kg db,
+Soak 25 C: R/R0 after 3 h,1.0893371071120015,-,
+D(25 C),2.9759975811825246e-11,m2/s,
+D(45 C),6.785492430399075e-11,m2/s,
+Lewis number Le = alpha/D_gel(100 C),355.3507124182103,-,
+D_gel(100 C),3.2281090960497097e-10,m2/s,
+Heat 99 % at centre (full model),9.141424601975348,s,
+Water 50 % at centre (full model),1475.9005274584495,s,
+Ratio water50 / heat99,161.45191714861662,-,
+Ladder L1 core time,6.206730712359617,min,"Constant D, fixed size, surface at X_gel"
+Ladder L2 core time,6.440926635282173,min,+ starch state sets surface capacity and D
+Ladder L3 core time,11.258576252961886,min,+ swelling (moving boundary)
+Ladder L4 core time,9.94984717746723,min,+ D(T) Arrhenius (full model)
+"Core time, presoak 0 min",9.949716526179264,min,
+"Core time, presoak 30 min",9.191940357458346,min,
+"Core time, presoak 120 min",7.529180375391425,min,
+Cooked grain R/R0 (25 min),1.5142073957904112,-,
+Cooked grain volume ratio (25 min),3.471811114777622,-,
+Pot: water into rice,370.98362712753465,g,
+Pot: steam,29.016372873029507,g,
+Pot: core cooked,11.716666666666667,min,
+Pot: free water gone,32.12207341858032,min,
+Pot: number of grains N,21473.665917126964,-,
+Scenario base core time,9.950977575466327,min,"Base: medium, unsoaked, sea level"
+Scenario soak30 core time,9.193103841656669,min,Presoak 30 min
+Scenario soak120 core time,7.530245790491397,min,Presoak 2 h
+Scenario long core time,8.39747434377677,min,Long slender grain
+Scenario short core time,13.278343262439616,min,Short bold grain
+Scenario alt3000 core time,14.758989891825887,min,3000 m altitude
+Scenario cooker core time,5.000136476019507,min,Pressure cooker
+Scenario brown core time,16.14435935130491,min,Brown rice (D × 0.58)
+Scenario cyl core time,7.107058259540839,min,Same grain as cylinder (R = 2V/S)
+Verification checks passed,31,of 33,
+Verification checks INFO,2,,
+Verification checks failed,0,,
