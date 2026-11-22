@@ -2,8 +2,8 @@ RICE ON THE BOIL — heat and water transport when rice is soaked, heated and co
 ==================================================================================
 MS2280 Transport Phenomena in Materials Processing — project files
 
-Group:   [Name 1, roll no.]   [Name 2, roll no.]   [Name 3, roll no.]
-Date:    [submission date]
+Group:   [J R Gokul Aadarsh, MS25BTECH11017]   [Illendula Ashirwaad, MS25BTECH11016]   [Borugadda Anvesh, MS25BTECH11009]
+Date:    [23 November, 2026]
 
 One idea behind everything: cooking rice is two transport problems at once — heat
 into the grain and water into the grain. Heat is ~355× faster (Lewis number), so
