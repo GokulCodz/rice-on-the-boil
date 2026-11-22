@@ -52,6 +52,9 @@ Double-click Model/index.html (or the root index.html). Any current browser work
     Model details & assumptions, Definitions & units with the PARAMS table,
     Questions, notes & trials).
   - Playback bar: play/pause (space bar), restart, scrubber with event markers, speed.
+    Speed is real model time: 1× = 1 model second per real second, 4× = 4 model
+    seconds per real second, up to 1800×. Each stage starts at a sensible speed
+    (e.g. 1× for heat conduction, 60× for the pot, 600× for soaking).
   - Plots: hover for values; export each plot as SVG, PNG or CSV.
   - Notebook (top bar): notes, predictions, trials and kitchen data are kept in this
     browser (localStorage) and can be exported as a .txt file.

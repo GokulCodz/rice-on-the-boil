@@ -72,6 +72,12 @@
     var t0 = A.app.t; $('#restartBtn').click(); await wait(900);
     ok(A.app.playing || A.app.t !== t0, name + ': playback advances');
     $('#playBtn').click(); await wait(100);
+    // real-time rule: N× advances N model seconds per real second
+    var spSel = $('#speed'), sp0 = spSel.value; spSel.value = '4';
+    $('#restartBtn').click(); var tStart = A.app.t, w0 = performance.now(); await wait(1000);
+    var adv = A.app.t - tStart, real = (performance.now() - w0) / 1000;
+    ok(A.app.t >= A.app.result.timeline.t1 - 1e-9 || Math.abs(adv - 4 * real) <= 0.6, name + ': 4× gives 4 model s per real s (got ' + adv.toFixed(2) + ' s in ' + real.toFixed(2) + ' s)');
+    if (A.app.playing) A.togglePlay(); spSel.value = sp0; await wait(60);
     var sc = $('#scrub'); sc.value = 500; fire(sc, 'input'); await wait(100);
     ok(Math.abs(A.app.t - A.fToT(0.5)) / Math.max(1e-9, A.fToT(0.5)) < 1e-6, name + ': scrubber sets time');
     ok($$('#marks .mk').length >= 1, name + ': event markers');

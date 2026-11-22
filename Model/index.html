@@ -265,8 +265,8 @@ dialog pre { margin: 0; padding: 14px 16px; max-height: 60vh; overflow: auto; fo
   .step .dot { width: 40px; height: 40px; }
   .step .dot svg { width: 22px; height: 22px; }
   .steps::before { top: 20px; }
-  .playbar { grid-template-columns: auto auto minmax(0, 1fr) auto; }
-  .playbar .speed { display: none; }
+  .playbar { grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 6px; padding: 10px; }
+  .clock { min-width: 0; font-size: 12.5px; }
   .laws { grid-template-columns: minmax(0, 1fr); }
   dl.defs { grid-template-columns: minmax(0, 1fr); }
   .tile .tv { font-size: 21px; }
@@ -322,8 +322,9 @@ dialog pre { margin: 0; padding: 14px 16px; max-height: 60vh; overflow: auto; fo
         <button class="icon-btn" id="restartBtn" title="Restart" aria-label="Restart">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 8a4.5 4.5 0 1 0 1.4-3.3"/><path d="M3 2.5v3h3"/></svg></button>
         <div class="scrub"><div class="marks" id="marks"></div><input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Time scrubber"></div>
-        <select class="speed" id="speed" aria-label="Playback speed">
+        <select class="speed" id="speed" aria-label="Playback speed: model seconds per real second" title="Model seconds per real second (1× = real time)">
           <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+          <option value="10">10×</option><option value="30">30×</option><option value="60">60×</option><option value="120">120×</option><option value="300">300×</option><option value="600">600×</option><option value="1800">1800×</option>
         </select>
         <div class="clock" id="clock">0 s</div>
       </div>
@@ -640,10 +641,11 @@ function togglePlay() {
 function tick() {
   var now = performance.now();
   if (app.result && app.playing) {
-    var dtr = Math.min(0.25, (now - app.last) / 1000), sp = +$('#speed').value, tl = app.result.timeline, dur = tl.playSeconds || 20;
-    var f = tToF(app.t) + dtr * sp / dur;
-    if (f >= 1) { f = 1; app.playing = false; updatePlayBtn(); }
-    app.t = fToT(f); app.sceneDirty = true;
+    /* real-time playback: speed N× advances N model seconds per real second */
+    var dtr = Math.min(0.25, (now - app.last) / 1000), sp = +$('#speed').value, tl = app.result.timeline;
+    var tn = app.t + dtr * sp;
+    if (tn >= tl.t1) { tn = tl.t1; app.playing = false; updatePlayBtn(); }
+    app.t = tn; app.sceneDirty = true;
   }
   app.last = now;
   app.phase += 0.06;
@@ -1043,7 +1045,7 @@ function histAt(h, t) { var o = {}; for (var k in h) if (typeof h[k][0] === 'num
    STAGE 1 — HEAT THE POT
    ============================================================================= */
 defineStage({
-  key: 'pot', short: 'Heat the pot', icon: 'pot', animated: true,
+  key: 'pot', short: 'Heat the pot', icon: 'pot', animated: true, speed: 60,
   title: 'Where does the stove’s energy go — and why does the water stop at 100 °C?',
   intro: 'Before any rice goes in, follow one control volume: the water plus the pot. Separate three ideas that are easy to mix up — temperature (how hot, K), stored energy (how much, J) and heat-transfer rate (how fast, W) — and watch what happens when the water reaches its boiling point.',
   predict: { q: 'how long until 1 kg of water boils on a 1500 W burner?', sub: 'Starting at 25 °C, lid on, sea level.', unit: 'min', digits: 1, get: function (r) { return r.tBoil === null ? null : r.tBoil / 60; } },
@@ -1167,7 +1169,7 @@ defineStage({
    STAGE 2 — INTO THE GRAIN (heat conduction only)
    ============================================================================= */
 defineStage({
-  key: 'conduct', short: 'Into the grain', icon: 'grain',
+  key: 'conduct', short: 'Into the grain', icon: 'grain', speed: 1,
   title: 'How long does heat take to reach the centre of a grain?',
   intro: 'Drop a raw grain into hot water and switch water uptake off for a moment. Heat must first cross a thin film of water (convection) and then conduct through the solid. The centre lags behind the surface — but for how long?',
   predict: { q: 'how many seconds until the centre of a medium grain is within 1 K of boiling water?', sub: 'Grain at 25 °C, water at 100 °C, h = 1500 W/(m²·K).', unit: 's', digits: 1, get: function (r) { return r.run.events.tCentreWithin1K; } },
@@ -1299,7 +1301,7 @@ defineStage({
    ============================================================================= */
 var SOAK_RICE_G = 100;
 defineStage({
-  key: 'soak', short: 'Soak', icon: 'drop',
+  key: 'soak', short: 'Soak', icon: 'drop', speed: 600,
   title: 'How fast does water creep into a grain at room temperature?',
   intro: 'Soak raw rice in water below the gelatinization temperature. The surface wets at once and a wet front creeps inward; the grain swells a little. Two control volumes — the bath and the grains — exchange exactly the same water.',
   predict: { q: 'what is the mean moisture of a medium grain after 30 min at 25 °C?', sub: 'Dry basis, kg water per kg dry solid. Raw rice starts at 0.14; raw starch can hold about 0.40.', unit: 'kg/kg', digits: 3, get: function (r) { return interp(r.run.hist.t, r.run.hist.Xm, 1800); } },
@@ -1464,7 +1466,7 @@ function kitchenSoakPoints() {
    STAGE 4 — THE RACE (heat vs water)
    ============================================================================= */
 defineStage({
-  key: 'race', short: 'The race', icon: 'flag',
+  key: 'race', short: 'The race', icon: 'flag', speed: 1,
   title: 'Heat and water start together. Which one reaches the centre first?',
   intro: 'Same grain, same boiling water, both transport problems running at once. Heat and water obey equations of the same form, but their diffusivities differ by a factor of several hundred — the Lewis number. This is the core argument against estimating a cooking time from heat conduction alone.',
   predict: { q: 'how many times longer does water take to reach the centre than heat?', sub: 'Compare water 50 % at the centre with heat 99 % at the centre.', unit: '×', digits: 0, get: function (r) { return r.ratio; } },
@@ -1475,7 +1477,7 @@ defineStage({
     { id: 'h', type: 'range', label: 'h', unit: 'W/(m²·K)', min: 200, max: 10000, step: 50, value: 1500 }
   ],
   presets: [{ name: 'Boiling, sea level', v: { Tw: 100, h: 1500 } }, { name: '3000 m (90 °C)', v: { Tw: 90 } }, { name: 'Pressure cooker', v: { Tw: 120.5 } }],
-  hints: '<b>Watch the clock:</b> playback runs on a logarithmic time axis — each second of playback covers the same <i>factor</i> of time, from 0.02 s to almost 3 hours.',
+  hints: '<b>Watch the clock:</b> playback runs in model time — at 1× one second of playback is one second in the grain. Heat wins within about 9 s; then raise the speed (60×, 600×) to follow the water, which needs about 25 min to reach half-way at the centre. The scrubber and the ruler use a logarithmic time axis.',
   compute: function (v) {
     var run = P.runGrain({ level: 4, grain: v.grain, geom: v.geom, TC: v.Tw, T0: 25, h: v.h, duration: 1e4, outputs: { n: 260, log: true, tmin: 0.02 } });
     var al = P.grainAlpha(PAR.X0, PAR), D = P.DgelAt(v.Tw, PAR), R = run.R0;
@@ -1552,7 +1554,7 @@ defineStage({
 var LADDER_OPTS = [[1, 'L1', 'Constant D, fixed size, surface at X_gel'], [2, 'L2', '+ starch state sets capacity and D'], [3, 'L3', '+ swelling (moving boundary)'], [4, 'L4', '+ D(T) Arrhenius (full model)']];
 function cookWaterT(v) { return v.water === 'custom' ? v.Tc : P.placeBoilingPoint(v.water); }
 defineStage({
-  key: 'cook', short: 'Cook a grain', icon: 'bowl',
+  key: 'cook', short: 'Cook a grain', icon: 'bowl', speed: 30,
   title: 'What happens inside one grain while it cooks?',
   intro: 'Now everything is switched on: water enters, the starch gelatinizes from the outside in (the chalky white core shrinks), the grain swells, and the swollen, gelatinized surface can hold far more water. A model ladder shows which assumption changes the answer.',
   predict: { q: 'when is the centre of a medium grain cooked in boiling water?', sub: '“Cooked” = gelatinized fraction at the centre G<sub>c</sub> ≥ 0.9 (a chosen criterion). Grain starts at 25 °C.', unit: 'min', digits: 1, get: function (r) { return r.run.events.tCoreGel === null ? null : r.run.events.tCoreGel / 60; } },
@@ -1718,7 +1720,7 @@ defineStage({
    STAGE 6 — THE WHOLE POT
    ============================================================================= */
 defineStage({
-  key: 'pot2', short: 'The whole pot', icon: 'pot2', animated: true,
+  key: 'pot2', short: 'The whole pot', icon: 'pot2', animated: true, speed: 60,
   title: 'Where does the water go — into the rice or up as steam?',
   intro: 'Couple the pot (stage 1) with many grains (stage 5): one control volume for the free water, one for N identical grains. The grains and the steam compete for the same water. The absorption method works only if the free water runs out just after the core has gelatinized.',
   predict: { q: 'with 200 g rice and 400 g water (lid on, simmer), when is the free water gone?', sub: '1500 W to the boil, then 300 W.', unit: 'min', digits: 1, get: function (r) { return r.tDry === null ? null : r.tDry / 60; } },
@@ -1862,7 +1864,7 @@ defineStage({
 var SCEN_CACHE = {};
 function scenarioRun(sc) { return SCEN_CACHE[sc.id] || (SCEN_CACHE[sc.id] = P.runScenario(sc, { duration: 2400, n: 300 })); }
 defineStage({
-  key: 'verdict', short: 'Verdict', icon: 'scale',
+  key: 'verdict', short: 'Verdict', icon: 'scale', speed: 30,
   title: 'Is there one cooking time for rice?',
   intro: 'Same physics, nine situations: grain size and shape, presoaking, altitude, a pressure cooker and brown rice. Compare the full model with the two quick estimates — the thermal time R²/α and the water scale R²/D — and change what “cooked” means.',
   predict: { q: 'how many minutes separate the fastest and the slowest of the nine situations?', sub: 'Full model, cooked = G<sub>c</sub> ≥ 0.9.', unit: 'min', digits: 1, get: function (r) { return r.spread; } },
@@ -1956,6 +1958,7 @@ function goStage(i, opts) {
   clearTimeout(app.timer);
   app.idx = i; app.result = null; app.playing = false; app.plotList = null; updatePlayBtn();
   var st = cur();
+  $('#speed').value = String(st.speed || 1);   // per-stage starting speed (model s per real s)
   if (NB.visited.indexOf(st.key) < 0) { NB.visited.push(st.key); saveNB(); }
   if (location.hash !== '#' + st.key) { try { history.replaceState(null, '', '#' + st.key); } catch (e) { location.hash = st.key; } }
   document.title = 'Rice on the Boil — ' + (i + 1) + '. ' + st.short;
